@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Swolesome">
+  <meta name="theme-color" content="#111827">
+  <title>Wholesome Swolesome</title>
+  <link rel="manifest" href="manifest.json">
+  <link data-trunk rel="rust" data-wasm-opt="z"/>
+  <link data-trunk rel="copy-dir" href="public"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #111827;
+      --surface: #1f2937;
+      --surface2: #374151;
+      --accent: #f97316;
+      --accent-dim: #c2570a;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --border: #374151;
+      --radius: 12px;
+      --nav-h: 64px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    #app {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* ── Layout ── */
+    .page {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 16px calc(var(--nav-h) + 16px);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .page-title {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    /* ── Bottom nav ── */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 480px;
+      height: var(--nav-h);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: stretch;
+      z-index: 100;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .nav-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .nav-btn .icon { font-size: 22px; }
+    .nav-btn.active { color: var(--accent); }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .card-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity 0.15s;
+    }
+
+    .btn:active { opacity: 0.7; }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--surface2); color: var(--text); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-ghost { background: transparent; color: var(--text-muted); padding: 8px 12px; }
+    .btn-full { width: 100%; margin-top: 8px; }
+    .btn-sm { padding: 8px 14px; font-size: 13px; }
+
+    .btn-icon {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 50%;
+      font-size: 20px;
+    }
+
+    /* ── Inputs ── */
+    input[type="text"],
+    input[type="number"],
+    textarea,
+    select {
+      width: 100%;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 16px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--accent);
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .form-group { margin-bottom: 14px; }
+
+    /* ── Stepper (weight / reps) ── */
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stepper-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: none;
+      color: var(--text);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .stepper-btn:active { background: var(--border); }
+
+    .stepper-val {
+      min-width: 64px;
+      text-align: center;
+      font-size: 17px;
+      font-weight: 600;
+    }
+
+    .stepper-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      min-width: 28px;
+    }
+
+    /* ── Exercise card ── */
+    .exercise-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    .exercise-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .exercise-chevron {
+      font-size: 18px;
+      color: var(--text-muted);
+      transition: transform 0.2s;
+    }
+
+    .exercise-chevron.open { transform: rotate(180deg); }
+
+    .exercise-sets { margin-top: 14px; }
+
+    .set-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .set-num {
+      font-size: 13px;
+      color: var(--text-muted);
+      width: 40px;
+      flex-shrink: 0;
+    }
+
+    .set-controls {
+      flex: 1;
+      display: flex;
+      gap: 12px;
+    }
+
+    .set-control {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .set-done-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+
+    .set-done-btn.done {
+      background: var(--success);
+      border-color: var(--success);
+      color: #fff;
+    }
+
+    .add-set-btn {
+      width: 100%;
+      padding: 10px;
+      background: transparent;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 10px;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Exercise completed indicator ── */
+    .exercise-complete-badge {
+      font-size: 12px;
+      background: var(--success);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+
+    /* ── Category pills ── */
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+
+    .pill-main { background: #1e3a5f; color: #60a5fa; }
+    .pill-core { background: #3b1f5e; color: #c084fc; }
+    .pill-cardio { background: #1a3a2a; color: #4ade80; }
+
+    /* ── History ── */
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .history-date {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .history-stats {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    /* ── Plan editor ── */
+    .day-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .ex-edit-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .ex-edit-info { flex: 1; }
+
+    /* ── Back button ── */
+    .back-btn {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px 8px 4px 0;
+      -webkit-tap-highlight-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+    /* ── Empty state ── */
+    .empty {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 40px 20px;
+    }
+
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+    /* ── Progress table ── */
+    .progress-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .progress-table th {
+      text-align: left;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 8px 0 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .progress-table td { padding: 10px 0; border-bottom: 1px solid var(--border); }
+
+    /* ── Modals / overlays ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      display: flex;
+      align-items: flex-end;
+    }
+
+    .modal-sheet {
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      background: var(--surface);
+      border-radius: var(--radius) var(--radius) 0 0;
+      padding: 24px 16px calc(env(safe-area-inset-bottom) + 16px);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: calc(var(--nav-h) + 16px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface2);
+      color: var(--text);
+      padding: 10px 20px;
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 300;
+      pointer-events: none;
+    }
+
+    /* ── Utilities ── */
+    .row { display: flex; gap: 8px; }
+    .col { display: flex; flex-direction: column; gap: 8px; }
+    .flex-1 { flex: 1; }
+    .mt-8 { margin-top: 8px; }
+    .mt-16 { margin-top: 16px; }
+    .text-muted { color: var(--text-muted); }
+    .text-sm { font-size: 13px; }
+    .text-accent { color: var(--accent); }
+    .text-success { color: var(--success); }
+    .fw-600 { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js');
+      });
+    }
+  </script>
+</body>
+</html>
