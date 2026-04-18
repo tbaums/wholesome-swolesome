@@ -8,8 +8,12 @@ use crate::app::{AppState, View};
 pub fn SessionView(_day_id: String) -> impl IntoView {
     let state = expect_context::<AppState>();
 
-    move || match state.active_session.get() {
-        None => view! {
+    // Memo only fires when None↔Some flips — not on every set toggle —
+    // so ActiveSession is never torn down and re-created mid-workout.
+    let has_session = Memo::new(move |_| state.active_session.get().is_some());
+
+    move || match has_session.get() {
+        false => view! {
             <div class="page">
                 <p class="text-muted">"No active session."</p>
                 <button class="btn btn-secondary mt-16"
@@ -18,7 +22,7 @@ pub fn SessionView(_day_id: String) -> impl IntoView {
                 </button>
             </div>
         }.into_any(),
-        Some(_) => view! { <ActiveSession/> }.into_any(),
+        true => view! { <ActiveSession/> }.into_any(),
     }
 }
 
@@ -82,7 +86,7 @@ fn ActiveSession() -> impl IntoView {
     // Compute once — exercises don't change mid-session, and keeping this
     // non-reactive stops `For` from re-creating cards on every set toggle
     // (which was causing the accordion to collapse on each interaction).
-    let exercise_ids: Vec<String> = state.active_session.get()
+    let exercise_ids: Vec<String> = state.active_session.get_untracked()
         .map(|s| s.exercise_logs.iter().map(|e| e.exercise_id.clone()).collect())
         .unwrap_or_default();
 
@@ -170,17 +174,16 @@ fn ExerciseCard(
         }
     };
 
-    let set_count = {
+    // Computed once — same rationale as exercise_ids above: prevents inner For
+    // from re-creating SetRow components (and re-firing CSS transitions) every
+    // time a set is toggled.
+    let set_indices: Vec<usize> = {
         let ex_id = ex_id.clone();
-        move || {
-            state.active_session.get()
-                .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
-                .map(|e| e.sets.len())
-                .unwrap_or(0)
-        }
+        state.active_session.get_untracked()
+            .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
+            .map(|e| (0..e.sets.len()).collect())
+            .unwrap_or_default()
     };
-
-    let set_indices = move || (0..set_count()).collect::<Vec<_>>();
 
     let add_set = {
         let ex_id = ex_id.clone();
@@ -207,8 +210,8 @@ fn ExerciseCard(
 
     view! {
         <div class="ex-card" class:ex-complete=is_complete>
-            // Tappable header
-            <div class="exercise-header" on:click=toggle>
+            // Header — only the chevron toggles the accordion
+            <div class="exercise-header">
                 <div>
                     <div class="card-title">{ex_name}</div>
                     <div class="exercise-meta">{target_info}</div>
@@ -217,7 +220,7 @@ fn ExerciseCard(
                     {move || is_complete2().then(|| view! {
                         <span class="exercise-complete-badge">"✓"</span>
                     })}
-                    <span class="exercise-chevron" class:open=is_expanded>"⌄"</span>
+                    <span class="exercise-chevron" class:open=is_expanded on:click=toggle>"⌄"</span>
                 </div>
             </div>
 
@@ -226,7 +229,7 @@ fn ExerciseCard(
                 <div>
                     <div class="exercise-sets">
                         <For
-                            each=set_indices
+                            each=move || set_indices.clone()
                             key=|i| *i
                             children={
                                 let ex_id = ex_id.clone();

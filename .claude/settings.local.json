@@ -6,7 +6,13 @@
       "Read(//usr/local/bin/**)",
       "Read(//opt/homebrew/bin/**)",
       "Bash(export PATH=\"$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\")",
-      "Bash(cargo --version)"
+      "Bash(cargo --version)",
+      "Bash(trunk build *)",
+      "Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")",
+      "Bash(cargo build *)",
+      "Bash(~/.cargo/bin/cargo build *)",
+      "Bash(cargo check *)",
+      "Bash(~/.cargo/bin/cargo check *)"
     ]
   }
 }

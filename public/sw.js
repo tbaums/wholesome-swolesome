@@ -1,4 +1,4 @@
-const CACHE = "swolesome-v2";
+const CACHE = "swolesome-v3";
 
 const PRECACHE = [
   "./",
