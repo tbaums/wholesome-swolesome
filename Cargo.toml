@@ -8,7 +8,15 @@ leptos = { version = "0.7", features = ["csr"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["Window", "Storage", "Document", "HtmlAnchorElement", "Url"] }
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Storage",
+    "Document",
+    "HtmlAnchorElement",
+    "Url",
+    "Blob",
+    "BlobPropertyBag",
+] }
 js-sys = "0.3"
 uuid = { version = "1", features = ["v4", "js"] }
 

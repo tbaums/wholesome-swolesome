@@ -4,8 +4,6 @@ use crate::app::{new_session, AppState, View};
 
 #[component]
 pub fn HomeView() -> impl IntoView {
-    let state = expect_context::<AppState>();
-
     view! {
         <div class="page">
             <div class="page-header">
@@ -24,13 +22,9 @@ pub fn HomeView() -> impl IntoView {
 fn DayGrid() -> impl IntoView {
     let state = expect_context::<AppState>();
     let plan = state.plan;
-    let history = state.history;
 
-    // Find the day_id of the last completed session to suggest the next one
-    let suggested_day_id = move || {
-        let h = history.get();
-        let last = h.iter().rev().find(|s| s.is_complete);
-        last.map(|s| s.day_id.clone())
+    let enumerated_days = move || {
+        plan.get().days.into_iter().enumerate().collect::<Vec<_>>()
     };
 
     view! {
@@ -39,26 +33,11 @@ fn DayGrid() -> impl IntoView {
             <div class="card-sub" style="margin-bottom:8px">"Tap a day to begin"</div>
             <div style="margin-top:12px">
                 <For
-                    each=move || plan.get().days
-                    key=|day| day.id.clone()
-                    children=move |day| {
+                    each=enumerated_days
+                    key=|(_, day)| day.id.clone()
+                    children=move |(idx, day)| {
                         let day_id = day.id.clone();
-                        let is_suggested = {
-                            let day_id = day_id.clone();
-                            move || {
-                                // Suggest the day *after* the last completed one
-                                let plan = plan.get();
-                                if let Some(last_id) = suggested_day_id() {
-                                    let last_pos = plan.days.iter().position(|d| d.id == last_id);
-                                    if let Some(pos) = last_pos {
-                                        let next_pos = (pos + 1) % plan.days.len();
-                                        return plan.days[next_pos].id == day_id;
-                                    }
-                                }
-                                // If no history, suggest day 1
-                                plan.days.first().map(|d| d.id == day_id).unwrap_or(false)
-                            }
-                        };
+                        let day_num = idx + 1;
                         let ex_count = day.exercises.len();
                         let on_start = {
                             let day_id = day_id.clone();
@@ -80,17 +59,13 @@ fn DayGrid() -> impl IntoView {
                                 style="justify-content:space-between; margin-bottom:8px"
                                 on:click=on_start
                             >
-                                <span style="display:flex; flex-direction:column; align-items:flex-start; gap:2px">
+                                <span style="display:flex; flex-direction:column; align-items:flex-start; gap:1px">
+                                    <span style="font-size:11px; color:var(--text-muted); font-weight:500">
+                                        "Day " {day_num}
+                                    </span>
                                     <span>{day.name}</span>
-                                    <span class="text-muted text-sm">
-                                        {ex_count} " exercises"
-                                    </span>
+                                    <span class="text-muted text-sm">{ex_count} " exercises"</span>
                                 </span>
-                                {move || is_suggested().then(|| view! {
-                                    <span style="background:var(--accent); color:#fff; font-size:11px; padding:3px 8px; border-radius:20px; font-weight:600">
-                                        "Suggested"
-                                    </span>
-                                })}
                             </button>
                         }
                     }

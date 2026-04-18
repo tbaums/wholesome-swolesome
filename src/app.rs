@@ -91,7 +91,7 @@ fn CurrentView() -> impl IntoView {
     move || match state.view.get() {
         View::Home => view! { <crate::components::home::HomeView/> }.into_any(),
         View::Session { day_id } => {
-            view! { <crate::components::session::SessionView day_id=day_id/> }.into_any()
+            view! { <crate::components::session::SessionView _day_id=day_id/> }.into_any()
         }
         View::History => view! { <crate::components::history::HistoryView/> }.into_any(),
         View::SessionDetail { session_id } => {
@@ -127,28 +127,34 @@ fn BottomNav() -> impl IntoView {
 
     view! {
         <nav class="bottom-nav">
-            <button
-                class="nav-btn"
-                class:active=is_home
-                on:click=move |_| state.navigate(View::Home)
-            >
-                <span class="icon">"🏋️"</span>
+            // Workout — dumbbell
+            <button class="nav-btn" class:active=is_home on:click=move |_| state.navigate(View::Home)>
+                <span class="icon">
+                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                        <path d="M6.5 8v8M17.5 8v8M3 10v4M21 10v4M6.5 12h11"/>
+                    </svg>
+                </span>
                 <span>"Workout"</span>
             </button>
-            <button
-                class="nav-btn"
-                class:active=is_plan
-                on:click=move |_| state.navigate(View::PlanEditor)
-            >
-                <span class="icon">"📋"</span>
+            // Plan — clipboard
+            <button class="nav-btn" class:active=is_plan on:click=move |_| state.navigate(View::PlanEditor)>
+                <span class="icon">
+                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                        <rect x="9" y="3" width="6" height="4" rx="1"/>
+                        <path d="M9 12h6M9 16h4"/>
+                    </svg>
+                </span>
                 <span>"Plan"</span>
             </button>
-            <button
-                class="nav-btn"
-                class:active=is_history
-                on:click=move |_| state.navigate(View::History)
-            >
-                <span class="icon">"📈"</span>
+            // History — trending up
+            <button class="nav-btn" class:active=is_history on:click=move |_| state.navigate(View::History)>
+                <span class="icon">
+                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+                        <polyline points="16 7 22 7 22 13"/>
+                    </svg>
+                </span>
                 <span>"History"</span>
             </button>
         </nav>

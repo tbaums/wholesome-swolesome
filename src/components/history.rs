@@ -103,13 +103,18 @@ pub fn SessionDetailView(session_id: String) -> impl IntoView {
         }
     };
 
+    // Three separate clones: header title, body For, and the outer match.
+    // Each `move ||` consumes one copy.
+    let session_header = session.clone();
+    let session_body = session.clone();
+
     view! {
         <div class="page">
             <div class="page-header">
                 <button class="back-btn" on:click=move |_| state.navigate(View::History)>
                     "‹ Back"
                 </button>
-                {move || session().map(|s| view! {
+                {move || session_header().map(|s| view! {
                     <div>
                         <div class="page-title">{s.day_name}</div>
                         <div class="text-muted text-sm">{s.date}</div>
@@ -117,13 +122,16 @@ pub fn SessionDetailView(session_id: String) -> impl IntoView {
                 })}
             </div>
 
-            {move || match session() {
+            {move || match session_body() {
                 None => view! { <p class="text-muted">"Session not found."</p> }.into_any(),
                 Some(_) => {
+                    // Clone these so the outer Fn closure isn't consumed by inner move ||
+                    let session2 = session_body.clone();
+                    let delete_session = delete_session.clone();
                     view! {
                         <div>
                             <For
-                                each=move || session().map(|s| s.exercise_logs).unwrap_or_default()
+                                each=move || session2().map(|s| s.exercise_logs).unwrap_or_default()
                                 key=|log| log.exercise_id.clone()
                                 children=move |log| {
                                     let ex_name = log.exercise_name.clone();

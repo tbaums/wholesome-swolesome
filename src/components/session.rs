@@ -5,7 +5,7 @@ use crate::app::{AppState, View};
 // ── Session view ──────────────────────────────────────────────────────────────
 
 #[component]
-pub fn SessionView(day_id: String) -> impl IntoView {
+pub fn SessionView(_day_id: String) -> impl IntoView {
     let state = expect_context::<AppState>();
 
     move || match state.active_session.get() {
@@ -18,15 +18,18 @@ pub fn SessionView(day_id: String) -> impl IntoView {
                 </button>
             </div>
         }.into_any(),
-        Some(_) => view! { <ActiveSession day_id=day_id.clone()/> }.into_any(),
+        Some(_) => view! { <ActiveSession/> }.into_any(),
     }
 }
 
 // ── Active session ────────────────────────────────────────────────────────────
 
 #[component]
-fn ActiveSession(day_id: String) -> impl IntoView {
+fn ActiveSession() -> impl IntoView {
     let state = expect_context::<AppState>();
+
+    // Tracks which exercise (by ID) is currently expanded — accordion behaviour.
+    let open_ex: RwSignal<Option<String>> = RwSignal::new(None);
 
     let day_name = move || {
         state.active_session.get()
@@ -66,7 +69,7 @@ fn ActiveSession(day_id: String) -> impl IntoView {
                 }
             });
             state.active_session.set(None);
-            state.show_toast("Workout saved!");
+            state.show_toast("Workout saved! 💪");
             state.navigate(View::History);
         }
     };
@@ -76,11 +79,12 @@ fn ActiveSession(day_id: String) -> impl IntoView {
         state.navigate(View::Home);
     };
 
-    let exercise_ids = move || {
-        state.active_session.get()
-            .map(|s| s.exercise_logs.iter().map(|e| e.exercise_id.clone()).collect::<Vec<_>>())
-            .unwrap_or_default()
-    };
+    // Compute once — exercises don't change mid-session, and keeping this
+    // non-reactive stops `For` from re-creating cards on every set toggle
+    // (which was causing the accordion to collapse on each interaction).
+    let exercise_ids: Vec<String> = state.active_session.get()
+        .map(|s| s.exercise_logs.iter().map(|e| e.exercise_id.clone()).collect())
+        .unwrap_or_default();
 
     view! {
         <div class="page">
@@ -93,17 +97,17 @@ fn ActiveSession(day_id: String) -> impl IntoView {
             </div>
 
             <For
-                each=exercise_ids
+                each=move || exercise_ids.clone()
                 key=|id| id.clone()
-                children=move |ex_id| view! { <ExerciseCard ex_id=ex_id/> }
+                children=move |ex_id| view! { <ExerciseCard ex_id=ex_id open_ex=open_ex/> }
             />
 
             <button
-                class="btn btn-success btn-full"
+                class="btn btn-finish btn-full"
                 style="margin-top:8px"
                 on:click=finish
             >
-                {move || if all_done() { "✓ Finish Workout" } else { "Finish Workout" }}
+                {move || if all_done() { "✓  Finish Workout" } else { "Finish Workout" }}
             </button>
         </div>
     }
@@ -112,9 +116,11 @@ fn ActiveSession(day_id: String) -> impl IntoView {
 // ── Exercise card ─────────────────────────────────────────────────────────────
 
 #[component]
-fn ExerciseCard(ex_id: String) -> impl IntoView {
+fn ExerciseCard(
+    ex_id: String,
+    open_ex: RwSignal<Option<String>>,
+) -> impl IntoView {
     let state = expect_context::<AppState>();
-    let expanded = RwSignal::new(false);
 
     let ex_name = {
         let ex_id = ex_id.clone();
@@ -146,7 +152,24 @@ fn ExerciseCard(ex_id: String) -> impl IntoView {
         }
     };
 
-    // Reactive set count — used by set_indices below
+    let is_expanded = {
+        let ex_id = ex_id.clone();
+        move || open_ex.get().as_deref() == Some(ex_id.as_str())
+    };
+
+    let toggle = {
+        let ex_id = ex_id.clone();
+        move |_| {
+            open_ex.update(|opt| {
+                if opt.as_deref() == Some(ex_id.as_str()) {
+                    *opt = None;
+                } else {
+                    *opt = Some(ex_id.clone());
+                }
+            });
+        }
+    };
+
     let set_count = {
         let ex_id = ex_id.clone();
         move || {
@@ -179,38 +202,42 @@ fn ExerciseCard(ex_id: String) -> impl IntoView {
         }
     };
 
+    let is_complete2 = is_complete.clone();
+    let is_expanded2 = is_expanded.clone();
+
     view! {
-        <div class="card" style="margin-bottom:12px">
-            // Header (tap to expand/collapse)
-            <div class="exercise-header"
-                on:click=move |_| expanded.update(|v| *v = !*v)>
+        <div class="ex-card" class:ex-complete=is_complete>
+            // Tappable header
+            <div class="exercise-header" on:click=toggle>
                 <div>
                     <div class="card-title">{ex_name}</div>
                     <div class="exercise-meta">{target_info}</div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px">
-                    {move || is_complete().then(|| view! {
-                        <span class="exercise-complete-badge">"✓ Done"</span>
+                    {move || is_complete2().then(|| view! {
+                        <span class="exercise-complete-badge">"✓"</span>
                     })}
-                    <span class="exercise-chevron" class:open=move || expanded.get()>"⌄"</span>
+                    <span class="exercise-chevron" class:open=is_expanded>"⌄"</span>
                 </div>
             </div>
 
-            // Sets panel — always in DOM, shown/hidden via CSS
-            <div style:display=move || if expanded.get() { "block" } else { "none" }>
-                <div class="exercise-sets">
-                    <For
-                        each=set_indices
-                        key=|i| *i
-                        children={
-                            let ex_id = ex_id.clone();
-                            move |set_idx| {
+            // Animated accordion body (CSS grid trick — no JS height calc needed)
+            <div class="exercise-body" class:open=is_expanded2>
+                <div>
+                    <div class="exercise-sets">
+                        <For
+                            each=set_indices
+                            key=|i| *i
+                            children={
                                 let ex_id = ex_id.clone();
-                                view! { <SetRow ex_id=ex_id set_idx=set_idx/> }
+                                move |set_idx| {
+                                    let ex_id = ex_id.clone();
+                                    view! { <SetRow ex_id=ex_id set_idx=set_idx/> }
+                                }
                             }
-                        }
-                    />
-                    <button class="add-set-btn" on:click=add_set>"+ Add Set"</button>
+                        />
+                        <button class="add-set-btn" on:click=add_set>"+ Add Set"</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -256,15 +283,15 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         }
     };
 
-    // Shared helper: update a set field
-    let update_set = {
+    let on_weight_change = {
         let ex_id = ex_id.clone();
-        move |f: &dyn Fn(&mut crate::models::SetLog)| {
+        move |e| {
+            let val: f32 = event_target_value(&e).parse().unwrap_or(0.0);
             state.active_session.update(|opt| {
                 if let Some(s) = opt.as_mut() {
-                    if let Some(log) = s.exercise_logs.iter_mut().find(|e| e.exercise_id == ex_id) {
+                    if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {
                         if let Some(set) = log.sets.get_mut(set_idx) {
-                            f(set);
+                            set.weight_lbs = val;
                         }
                     }
                 }
@@ -272,57 +299,83 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         }
     };
 
-    let weight_dec = {
-        let u = update_set.clone();
-        move |_| u(&|s| s.weight_lbs = (s.weight_lbs - 2.5).max(0.0))
+    let on_reps_change = {
+        let ex_id = ex_id.clone();
+        move |e| {
+            let val: u32 = event_target_value(&e).parse().unwrap_or(0);
+            state.active_session.update(|opt| {
+                if let Some(s) = opt.as_mut() {
+                    if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {
+                        if let Some(set) = log.sets.get_mut(set_idx) {
+                            set.reps = val;
+                        }
+                    }
+                }
+            });
+        }
     };
-    let weight_inc = {
-        let u = update_set.clone();
-        move |_| u(&|s| s.weight_lbs += 2.5)
-    };
-    let reps_dec = {
-        let u = update_set.clone();
-        move |_| u(&|s| s.reps = s.reps.saturating_sub(1))
-    };
-    let reps_inc = {
-        let u = update_set.clone();
-        move |_| u(&|s| s.reps += 1)
-    };
+
     let toggle_done = {
-        let u = update_set.clone();
-        move |_| u(&|s| s.completed = !s.completed)
+        let ex_id = ex_id.clone();
+        move |_| {
+            state.active_session.update(|opt| {
+                if let Some(s) = opt.as_mut() {
+                    if let Some(log) = s.exercise_logs.iter_mut().find(|e| e.exercise_id == ex_id) {
+                        if let Some(set) = log.sets.get_mut(set_idx) {
+                            set.completed = !set.completed;
+                        }
+                    }
+                }
+            });
+        }
     };
+
+    // Format weight: show integer if no fractional part
+    let weight_str = move || {
+        let w = weight();
+        if w == 0.0 { String::new() }
+        else if w.fract() == 0.0 { format!("{:.0}", w) }
+        else { format!("{:.1}", w) }
+    };
+
+    let reps_str = move || {
+        let r = reps();
+        if r == 0 { String::new() } else { r.to_string() }
+    };
+
+    let is_done2 = is_done.clone();
 
     view! {
-        <div class="set-row">
-            <div class="set-num">{format!("Set {}", set_idx + 1)}</div>
+        <div class="set-row" class:set-done=is_done>
+            <span class="set-num">"Set " {set_idx + 1}</span>
 
-            <div class="set-controls">
-                // Weight stepper
-                <div class="set-control">
-                    <span class="stepper-label">"lbs"</span>
-                    <div class="stepper">
-                        <button class="stepper-btn" on:click=weight_dec>"−"</button>
-                        <span class="stepper-val">{move || format!("{:.1}", weight())}</span>
-                        <button class="stepper-btn" on:click=weight_inc>"+"</button>
-                    </div>
-                </div>
-
-                // Reps stepper
-                <div class="set-control">
-                    <span class="stepper-label">"reps"</span>
-                    <div class="stepper">
-                        <button class="stepper-btn" on:click=reps_dec>"−"</button>
-                        <span class="stepper-val">{move || reps().to_string()}</span>
-                        <button class="stepper-btn" on:click=reps_inc>"+"</button>
-                    </div>
-                </div>
+            <div class="set-inputs">
+                <input
+                    type="number"
+                    inputmode="decimal"
+                    step="2.5"
+                    min="0"
+                    class="set-num-input"
+                    placeholder="wt"
+                    prop:value=weight_str
+                    on:change=on_weight_change
+                />
+                <span class="set-x">"×"</span>
+                <input
+                    type="number"
+                    inputmode="numeric"
+                    step="1"
+                    min="0"
+                    class="set-num-input"
+                    placeholder="reps"
+                    prop:value=reps_str
+                    on:change=on_reps_change
+                />
             </div>
 
-            // Done checkmark
             <button
                 class="set-done-btn"
-                class:done=is_done
+                class:done=is_done2
                 on:click=toggle_done
             >
                 "✓"

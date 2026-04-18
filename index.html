@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Swolesome">
-  <meta name="theme-color" content="#111827">
+  <meta name="theme-color" content="#0f0d1f">
   <title>Wholesome Swolesome</title>
   <link rel="manifest" href="manifest.json">
   <link data-trunk rel="rust" data-wasm-opt="z"/>
@@ -15,43 +15,53 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #111827;
-      --surface: #1f2937;
-      --surface2: #374151;
-      --accent: #f97316;
-      --accent-dim: #c2570a;
-      --success: #22c55e;
-      --danger: #ef4444;
-      --text: #f9fafb;
-      --text-muted: #9ca3af;
-      --border: #374151;
-      --radius: 12px;
-      --nav-h: 64px;
+      --bg:       #0f0d1f;   /* deep purple-black */
+      --surface:  #1c1535;   /* dark purple */
+      --surface2: #2d2050;   /* medium purple */
+      --accent:   #5BCEFA;   /* trans blue */
+      --pink:     #F5A9B8;   /* trans pink */
+      --purple:   #A855F7;   /* vibrant purple */
+      --success:  #F5A9B8;
+      --danger:   #ef4444;
+      --text:     #f0ecff;   /* lavender white */
+      --text-muted: #a594cc; /* muted purple */
+      --border:   #3d2878;   /* purple border */
+      --radius:   12px;
+      --nav-h:    64px;
+      --trans:    linear-gradient(135deg, #5BCEFA 0%, #A855F7 50%, #F5A9B8 100%);
+      --trans-h:  linear-gradient(90deg,  #5BCEFA 0%, #A855F7 50%, #F5A9B8 100%);
     }
 
     html, body {
-      height: 100%;
-      background: var(--bg);
+      overscroll-behavior: none;
+      background: var(--pink);  /* trans pink shows outside the app column */
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 16px;
       -webkit-font-smoothing: antialiased;
-      overscroll-behavior: none;
     }
 
     #app {
-      height: 100%;
-      display: flex;
-      flex-direction: column;
       max-width: 480px;
       margin: 0 auto;
+      min-height: 100vh;
+      background: var(--bg);   /* dark purple inside the column */
+    }
+
+    /* ── Animations ── */
+    @keyframes popIn {
+      0%   { transform: scale(0.7); }
+      55%  { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
     }
 
     /* ── Layout ── */
     .page {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px 16px calc(var(--nav-h) + 16px);
+      padding: 16px 16px calc(var(--nav-h) + 24px);
       -webkit-overflow-scrolling: touch;
     }
 
@@ -63,8 +73,13 @@
     }
 
     .page-title {
-      font-size: 22px;
-      font-weight: 700;
+      font-size: 24px;
+      font-weight: 800;
+      background: var(--trans);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.3px;
     }
 
     /* ── Bottom nav ── */
@@ -76,8 +91,10 @@
       width: 100%;
       max-width: 480px;
       height: var(--nav-h);
-      background: var(--surface);
-      border-top: 1px solid var(--border);
+      /* gradient top border */
+      background: linear-gradient(var(--surface), var(--surface)) padding-box,
+                  var(--trans-h) border-box;
+      border-top: 2px solid transparent;
       display: flex;
       align-items: stretch;
       z-index: 100;
@@ -86,23 +103,51 @@
 
     .nav-btn {
       flex: 1;
+      position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: 3px;
       background: none;
       border: none;
       color: var(--text-muted);
-      font-size: 11px;
-      font-weight: 500;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
       cursor: pointer;
       transition: color 0.15s;
       -webkit-tap-highlight-color: transparent;
     }
 
-    .nav-btn .icon { font-size: 22px; }
-    .nav-btn.active { color: var(--accent); }
+    .nav-btn .icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .nav-btn.active {
+      color: var(--accent);
+    }
+
+    /* Glowing pill behind active nav icon */
+    .nav-btn.active::before {
+      content: '';
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 44px;
+      height: 32px;
+      background: linear-gradient(135deg,
+        rgba(91,206,250,0.18) 0%,
+        rgba(168,85,247,0.18) 50%,
+        rgba(245,169,184,0.18) 100%);
+      border-radius: 10px;
+    }
 
     /* ── Cards ── */
     .card {
@@ -110,12 +155,27 @@
       border-radius: var(--radius);
       padding: 16px;
       margin-bottom: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Bold trans gradient stripe on left edge */
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 5px;
+      background: var(--trans);
     }
 
     .card-title {
       font-size: 15px;
-      font-weight: 600;
+      font-weight: 700;
       margin-bottom: 4px;
+      background: var(--trans);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
     .card-sub {
@@ -133,21 +193,36 @@
       border-radius: 10px;
       border: none;
       font-size: 15px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
-      transition: opacity 0.15s;
+      transition: opacity 0.1s, transform 0.1s;
     }
 
-    .btn:active { opacity: 0.7; }
+    .btn:active { transform: scale(0.96); opacity: 0.82; }
 
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-secondary { background: var(--surface2); color: var(--text); }
-    .btn-danger { background: var(--danger); color: #fff; }
-    .btn-success { background: var(--success); color: #fff; }
-    .btn-ghost { background: transparent; color: var(--text-muted); padding: 8px 12px; }
-    .btn-full { width: 100%; margin-top: 8px; }
-    .btn-sm { padding: 8px 14px; font-size: 13px; }
+    .btn-primary   { background: var(--accent);  color: #0f0d1f; }
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-danger    { background: var(--danger);  color: #fff; }
+    .btn-success   { background: var(--success); color: #0f0d1f; }
+    .btn-ghost     { background: transparent; color: var(--text-muted); padding: 8px 12px; }
+    .btn-full      { width: 100%; margin-top: 8px; }
+    .btn-sm        { padding: 8px 14px; font-size: 13px; }
+
+    .btn-finish {
+      background: var(--trans);
+      color: #0f0d1f;
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      padding: 16px 20px;
+      border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(168,85,247,0.35);
+    }
 
     .btn-icon {
       width: 44px;
@@ -178,6 +253,7 @@
     textarea:focus,
     select:focus {
       border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(91,206,250,0.2);
     }
 
     label {
@@ -189,45 +265,31 @@
 
     .form-group { margin-bottom: 14px; }
 
-    /* ── Stepper (weight / reps) ── */
-    .stepper {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    /* ── Exercise card (session view) ── */
+    .ex-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid transparent;
+      transition: border-color 0.25s;
     }
 
-    .stepper-btn {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      background: var(--surface2);
-      border: none;
-      color: var(--text);
-      font-size: 20px;
-      line-height: 1;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .ex-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 5px;
+      background: var(--trans);
     }
 
-    .stepper-btn:active { background: var(--border); }
-
-    .stepper-val {
-      min-width: 64px;
-      text-align: center;
-      font-size: 17px;
-      font-weight: 600;
+    .ex-card.ex-complete {
+      border-color: var(--pink);
+      background: linear-gradient(135deg, #1c1535 0%, #2a1040 100%);
     }
 
-    .stepper-label {
-      font-size: 11px;
-      color: var(--text-muted);
-      min-width: 28px;
-    }
-
-    /* ── Exercise card ── */
     .exercise-header {
       display: flex;
       align-items: center;
@@ -235,49 +297,104 @@
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
+      padding: 2px 0;
+    }
+
+    .card-title,
+    .exercise-header .card-title {
+      background: var(--trans);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-weight: 700;
     }
 
     .exercise-meta {
       font-size: 12px;
       color: var(--text-muted);
-      margin-top: 2px;
+      margin-top: 3px;
     }
 
     .exercise-chevron {
-      font-size: 18px;
-      color: var(--text-muted);
-      transition: transform 0.2s;
+      font-size: 20px;
+      color: var(--purple);
+      transition: transform 0.25s ease;
+      display: inline-block;
+      line-height: 1;
     }
 
     .exercise-chevron.open { transform: rotate(180deg); }
 
+    /* Accordion body — CSS grid trick */
+    .exercise-body {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.25s ease;
+      overflow: hidden;
+    }
+
+    .exercise-body.open { grid-template-rows: 1fr; }
+    .exercise-body > div { overflow: hidden; }
+
     .exercise-sets { margin-top: 14px; }
 
+    /* ── Exercise complete badge ── */
+    .exercise-complete-badge {
+      font-size: 12px;
+      background: var(--pink);
+      color: #0f0d1f;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-weight: 700;
+      animation: popIn 0.25s ease-out;
+    }
+
+    /* ── Set rows ── */
     .set-row {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 10px 0;
       border-top: 1px solid var(--border);
+      transition: opacity 0.2s;
     }
+
+    .set-row.set-done { opacity: 0.45; }
 
     .set-num {
       font-size: 13px;
-      color: var(--text-muted);
+      color: var(--purple);
+      font-weight: 700;
       width: 40px;
       flex-shrink: 0;
     }
 
-    .set-controls {
+    .set-inputs {
       flex: 1;
       display: flex;
-      gap: 12px;
+      align-items: center;
+      gap: 6px;
     }
 
-    .set-control {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
+    .set-num-input {
+      width: 72px !important;
+      padding: 8px 6px !important;
+      font-size: 15px !important;
+      font-weight: 700;
+      text-align: center;
+      -moz-appearance: textfield;
+    }
+    .set-num-input::-webkit-inner-spin-button,
+    .set-num-input::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .set-x {
+      color: var(--purple);
+      font-size: 16px;
+      font-weight: 700;
+      flex-shrink: 0;
     }
 
     .set-done-btn {
@@ -294,35 +411,35 @@
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      transition: all 0.15s;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
     }
 
+    .set-done-btn:active { transform: scale(0.88); }
+
     .set-done-btn.done {
-      background: var(--success);
-      border-color: var(--success);
-      color: #fff;
+      background: var(--pink);
+      border-color: var(--pink);
+      color: #0f0d1f;
+      animation: popIn 0.25s ease-out;
     }
 
     .add-set-btn {
       width: 100%;
       padding: 10px;
       background: transparent;
-      border: 1px dashed var(--border);
+      border: 1px dashed var(--purple);
       border-radius: 8px;
-      color: var(--text-muted);
+      color: var(--purple);
       font-size: 14px;
+      font-weight: 600;
       cursor: pointer;
       margin-top: 10px;
       -webkit-tap-highlight-color: transparent;
+      transition: background 0.15s, color 0.15s;
     }
 
-    /* ── Exercise completed indicator ── */
-    .exercise-complete-badge {
-      font-size: 12px;
-      background: var(--success);
-      color: #fff;
-      padding: 2px 8px;
-      border-radius: 20px;
+    .add-set-btn:active {
+      background: rgba(168,85,247,0.15);
     }
 
     /* ── Category pills ── */
@@ -331,12 +448,12 @@
       font-size: 11px;
       padding: 2px 8px;
       border-radius: 20px;
-      font-weight: 500;
+      font-weight: 600;
     }
 
-    .pill-main { background: #1e3a5f; color: #60a5fa; }
-    .pill-core { background: #3b1f5e; color: #c084fc; }
-    .pill-cardio { background: #1a3a2a; color: #4ade80; }
+    .pill-main    { background: rgba(91,206,250,0.15);  color: #5BCEFA; }
+    .pill-core    { background: rgba(168,85,247,0.15);  color: #A855F7; }
+    .pill-cardio  { background: rgba(245,169,184,0.15); color: #F5A9B8; }
 
     /* ── History ── */
     .history-item {
@@ -347,16 +464,8 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    .history-date {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    .history-stats {
-      font-size: 13px;
-      color: var(--text-muted);
-      text-align: right;
-    }
+    .history-date  { font-size: 13px; color: var(--text-muted); }
+    .history-stats { font-size: 13px; color: var(--text-muted); text-align: right; }
 
     /* ── Plan editor ── */
     .day-item {
@@ -383,6 +492,7 @@
       border: none;
       color: var(--accent);
       font-size: 16px;
+      font-weight: 700;
       cursor: pointer;
       padding: 4px 8px 4px 0;
       -webkit-tap-highlight-color: transparent;
@@ -409,17 +519,17 @@
       text-align: left;
       color: var(--text-muted);
       font-size: 12px;
-      font-weight: 500;
-      padding: 8px 0 8px 0;
+      font-weight: 600;
+      padding: 8px 0;
       border-bottom: 1px solid var(--border);
     }
     .progress-table td { padding: 10px 0; border-bottom: 1px solid var(--border); }
 
-    /* ── Modals / overlays ── */
+    /* ── Modals ── */
     .modal-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0,0,0,0.75);
       z-index: 200;
       display: flex;
       align-items: flex-end;
@@ -431,6 +541,9 @@
       margin: 0 auto;
       background: var(--surface);
       border-radius: var(--radius) var(--radius) 0 0;
+      border-top: 2px solid transparent;
+      background: linear-gradient(var(--surface), var(--surface)) padding-box,
+                  var(--trans-h) border-box;
       padding: 24px 16px calc(env(safe-area-inset-bottom) + 16px);
       max-height: 90vh;
       overflow-y: auto;
@@ -438,8 +551,12 @@
 
     .modal-title {
       font-size: 18px;
-      font-weight: 700;
+      font-weight: 800;
       margin-bottom: 16px;
+      background: var(--trans);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
     /* ── Toast ── */
@@ -449,30 +566,32 @@
       left: 50%;
       transform: translateX(-50%);
       background: var(--surface2);
+      border: 1px solid var(--purple);
       color: var(--text);
-      padding: 10px 20px;
+      padding: 10px 24px;
       border-radius: 24px;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       z-index: 300;
       pointer-events: none;
+      animation: slideUp 0.2s ease-out;
+      box-shadow: 0 4px 20px rgba(168,85,247,0.3);
     }
 
     /* ── Utilities ── */
-    .row { display: flex; gap: 8px; }
-    .col { display: flex; flex-direction: column; gap: 8px; }
-    .flex-1 { flex: 1; }
-    .mt-8 { margin-top: 8px; }
-    .mt-16 { margin-top: 16px; }
-    .text-muted { color: var(--text-muted); }
-    .text-sm { font-size: 13px; }
-    .text-accent { color: var(--accent); }
+    .row       { display: flex; gap: 8px; }
+    .col       { display: flex; flex-direction: column; gap: 8px; }
+    .flex-1    { flex: 1; }
+    .mt-8      { margin-top: 8px; }
+    .mt-16     { margin-top: 16px; }
+    .text-muted   { color: var(--text-muted); }
+    .text-sm      { font-size: 13px; }
+    .text-accent  { color: var(--accent); }
     .text-success { color: var(--success); }
-    .fw-600 { font-weight: 600; }
+    .fw-600    { font-weight: 600; }
   </style>
 </head>
 <body>
-  <div id="app"></div>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

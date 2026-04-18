@@ -36,8 +36,10 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
     };
 
     // Best set ever (max weight among completed sets)
+    // Clone rows so `best` and the reactive render section each get their own copy.
+    let rows_for_best = rows.clone();
     let best = move || {
-        rows().iter()
+        rows_for_best().iter()
             .filter(|(_, _, _, _, done)| *done)
             .max_by(|a, b| a.3.partial_cmp(&b.3).unwrap())
             .map(|(date, _, reps, weight, _)| format!("{:.1} lbs × {} reps on {}", weight, reps, date))
@@ -72,6 +74,8 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
                         </div>
                     }.into_any()
                 } else {
+                    // Clone so the outer Fn closure isn't consumed by the inner move ||
+                    let rows2 = rows.clone();
                     view! {
                         <div class="card">
                             <table class="progress-table" style="width:100%">
@@ -85,7 +89,7 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
                                 </thead>
                                 <tbody>
                                     <For
-                                        each=rows
+                                        each=rows2
                                         key=|r| format!("{}{}{}{:.1}", r.0, r.2, r.3, r.4)
                                         children=|(date, _day, reps, weight, done)| view! {
                                             <tr>

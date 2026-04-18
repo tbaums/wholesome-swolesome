@@ -45,6 +45,7 @@ impl ExerciseCategory {
             Self::Cardio => "Cardio",
         }
     }
+    #[allow(dead_code)]
     pub fn css_class(&self) -> &'static str {
         match self {
             Self::Main => "pill pill-main",

@@ -1,4 +1,4 @@
-use crate::models::{Exercise, ExerciseCategory, ExerciseLog, WorkoutDay, WorkoutPlan, WorkoutSession};
+use crate::models::{Exercise, ExerciseCategory, WorkoutDay, WorkoutPlan, WorkoutSession};
 
 // ── Plan CSV ─────────────────────────────────────────────────────────────────
 //
@@ -165,10 +165,13 @@ pub fn download_file(filename: &str, content: &str) {
 
     let blob_parts = js_sys::Array::new();
     blob_parts.push(&wasm_bindgen::JsValue::from_str(content));
-    let mut opts = web_sys::BlobPropertyBag::new();
-    opts.type_("text/csv");
-    let blob = web_sys::Blob::new_with_str_sequence_and_options(&blob_parts, &opts)
-        .expect("blob creation failed");
+    let opts = web_sys::BlobPropertyBag::new();
+    opts.set_type("text/csv;charset=utf-8");
+    let blob = web_sys::Blob::new_with_str_sequence_and_options(
+        &blob_parts.into(),
+        &opts,
+    )
+    .expect("blob creation failed");
 
     let url = web_sys::Url::create_object_url_with_blob(&blob).expect("create_object_url failed");
 
