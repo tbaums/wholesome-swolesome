@@ -54,11 +54,18 @@ impl AppState {
 
 #[component]
 pub fn App() -> impl IntoView {
+    let initial_session = storage::load_active_session();
+    let initial_view = if initial_session.is_some() {
+        View::Session { day_id: String::new() }
+    } else {
+        View::Home
+    };
+
     let state = AppState {
         plan: RwSignal::new(storage::load_plan()),
         history: RwSignal::new(storage::load_history()),
-        active_session: RwSignal::new(None),
-        view: RwSignal::new(View::Home),
+        active_session: RwSignal::new(initial_session),
+        view: RwSignal::new(initial_view),
         toast: RwSignal::new(None),
     };
     provide_context(state);
@@ -71,6 +78,11 @@ pub fn App() -> impl IntoView {
     // Auto-save history whenever it changes
     Effect::new(move |_| {
         storage::save_history(&state.history.get());
+    });
+
+    // Auto-save active session on every change; clear when finished
+    Effect::new(move |_| {
+        storage::save_active_session(&state.active_session.get());
     });
 
     view! {
