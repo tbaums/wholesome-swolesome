@@ -3,6 +3,7 @@ use crate::models::{WorkoutPlan, WorkoutSession};
 const PLAN_KEY: &str = "ws_plan";
 const HISTORY_KEY: &str = "ws_history";
 const SESSION_KEY: &str = "ws_active_session";
+const DRAFTS_KEY: &str = "ws_session_drafts";
 
 fn local_storage() -> Option<web_sys::Storage> {
     web_sys::window()?.local_storage().ok()?
@@ -38,6 +39,19 @@ pub fn load_active_session() -> Option<WorkoutSession> {
     local_storage()
         .and_then(|s| s.get_item(SESSION_KEY).ok().flatten())
         .and_then(|json| serde_json::from_str(&json).ok())
+}
+
+pub fn load_session_drafts() -> Vec<WorkoutSession> {
+    local_storage()
+        .and_then(|s| s.get_item(DRAFTS_KEY).ok().flatten())
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_session_drafts(drafts: &[WorkoutSession]) {
+    if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(drafts)) {
+        let _ = storage.set_item(DRAFTS_KEY, &json);
+    }
 }
 
 pub fn save_active_session(session: &Option<WorkoutSession>) {

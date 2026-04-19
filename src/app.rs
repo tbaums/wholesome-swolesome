@@ -26,6 +26,7 @@ pub struct AppState {
     pub plan: RwSignal<crate::models::WorkoutPlan>,
     pub history: RwSignal<Vec<WorkoutSession>>,
     pub active_session: RwSignal<Option<WorkoutSession>>,
+    pub session_drafts: RwSignal<Vec<WorkoutSession>>,
     pub view: RwSignal<View>,
     pub toast: RwSignal<Option<String>>,
 }
@@ -65,6 +66,7 @@ pub fn App() -> impl IntoView {
         plan: RwSignal::new(storage::load_plan()),
         history: RwSignal::new(storage::load_history()),
         active_session: RwSignal::new(initial_session),
+        session_drafts: RwSignal::new(storage::load_session_drafts()),
         view: RwSignal::new(initial_view),
         toast: RwSignal::new(None),
     };
@@ -83,6 +85,11 @@ pub fn App() -> impl IntoView {
     // Auto-save active session on every change; clear when finished
     Effect::new(move |_| {
         storage::save_active_session(&state.active_session.get());
+    });
+
+    // Auto-save session drafts
+    Effect::new(move |_| {
+        storage::save_session_drafts(&state.session_drafts.get());
     });
 
     view! {

@@ -42,19 +42,41 @@ fn DayGrid() -> impl IntoView {
                         let on_start = {
                             let day_id = day_id.clone();
                             move |_| {
-                                if state.active_session.get_untracked().is_some() {
-                                    state.navigate(View::Session { day_id: day_id.clone() });
-                                    return;
+                                let existing = state.active_session.get_untracked();
+
+                                // Same day already active — just resume
+                                if let Some(ref s) = existing {
+                                    if s.day_id == day_id {
+                                        state.navigate(View::Session { day_id: day_id.clone() });
+                                        return;
+                                    }
+                                    // Different day — shelve current session to drafts
+                                    state.session_drafts.update(|drafts| {
+                                        let s = existing.clone().unwrap();
+                                        if let Some(pos) = drafts.iter().position(|d| d.day_id == s.day_id) {
+                                            drafts[pos] = s;
+                                        } else {
+                                            drafts.push(s);
+                                        }
+                                    });
+                                    state.active_session.set(None);
                                 }
-                                let session = new_session(
-                                    &day_id,
-                                    &state.plan.get(),
-                                    &state.history.get(),
-                                );
-                                if let Some(s) = session {
-                                    state.active_session.set(Some(s));
-                                    state.navigate(View::Session { day_id: day_id.clone() });
+
+                                // Check drafts for the requested day
+                                let draft = state.session_drafts.get_untracked()
+                                    .into_iter()
+                                    .find(|d| d.day_id == day_id);
+
+                                if let Some(d) = draft {
+                                    state.session_drafts.update(|drafts| drafts.retain(|d| d.day_id != day_id));
+                                    state.active_session.set(Some(d));
+                                } else {
+                                    let session = new_session(&day_id, &state.plan.get(), &state.history.get());
+                                    if let Some(s) = session {
+                                        state.active_session.set(Some(s));
+                                    }
                                 }
+                                state.navigate(View::Session { day_id: day_id.clone() });
                             }
                         };
                         view! {
