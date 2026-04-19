@@ -42,6 +42,10 @@ fn DayGrid() -> impl IntoView {
                         let on_start = {
                             let day_id = day_id.clone();
                             move |_| {
+                                if state.active_session.get_untracked().is_some() {
+                                    state.navigate(View::Session { day_id: day_id.clone() });
+                                    return;
+                                }
                                 let session = new_session(
                                     &day_id,
                                     &state.plan.get(),

@@ -79,7 +79,6 @@ fn ActiveSession() -> impl IntoView {
     };
 
     let discard = move |_| {
-        state.active_session.set(None);
         state.navigate(View::Home);
     };
 
