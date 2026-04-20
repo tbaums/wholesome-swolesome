@@ -2,7 +2,14 @@
 set -e
 
 # Run both the WASM unit tests and Playwright E2E tests.
-# Prerequisites: wasm-pack (cargo install wasm-pack), Node.js, npx playwright install
+# Prerequisites:
+#   cargo install wasm-pack
+#   brew install node
+#   npm install  (in repo root)
+#   npx playwright install webkit
+
+# Ensure ~/.cargo/bin is on PATH (for wasm-pack and trunk)
+export PATH="$HOME/.cargo/bin:$PATH"
 
 echo "==> WASM unit tests (csv parsing)"
 wasm-pack test --headless --chrome --lib
