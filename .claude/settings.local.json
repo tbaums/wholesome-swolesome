@@ -12,7 +12,8 @@
       "Bash(cargo build *)",
       "Bash(~/.cargo/bin/cargo build *)",
       "Bash(cargo check *)",
-      "Bash(~/.cargo/bin/cargo check *)"
+      "Bash(~/.cargo/bin/cargo check *)",
+      "Bash(npx playwright *)"
     ]
   }
 }

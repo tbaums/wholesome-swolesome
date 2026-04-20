@@ -1,0 +1,10 @@
+{
+  "name": "wholesome-swolesome-tests",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.44.0"
+  },
+  "scripts": {
+    "test": "playwright test"
+  }
+}
