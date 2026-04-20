@@ -173,15 +173,14 @@ fn ExerciseCard(
         }
     };
 
-    // Computed once — same rationale as exercise_ids above: prevents inner For
-    // from re-creating SetRow components (and re-firing CSS transitions) every
-    // time a set is toggled.
-    let set_indices: Vec<usize> = {
+    let set_indices = {
         let ex_id = ex_id.clone();
-        state.active_session.get_untracked()
-            .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
-            .map(|e| (0..e.sets.len()).collect())
-            .unwrap_or_default()
+        move || {
+            state.active_session.get()
+                .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
+                .map(|e| (0..e.sets.len()).collect::<Vec<_>>())
+                .unwrap_or_default()
+        }
     };
 
     let add_set = {
@@ -228,7 +227,7 @@ fn ExerciseCard(
                 <div>
                     <div class="exercise-sets">
                         <For
-                            each=move || set_indices.clone()
+                            each=set_indices
                             key=|i| *i
                             children={
                                 let ex_id = ex_id.clone();
