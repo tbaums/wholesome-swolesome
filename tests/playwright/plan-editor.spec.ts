@@ -40,4 +40,31 @@ test.describe('Plan editor', () => {
     const after = await page.locator('.exercise-header').count();
     expect(after).toBe(before + 1);
   });
+
+  test('delete exercise removes it from the day', async ({ page }) => {
+    await page.locator('.card.day-item').first().click();
+    const before = await page.locator('.exercise-header').count();
+    // Open the first exercise card and click Delete exercise
+    await page.locator('.exercise-header').first().click();
+    await page.getByText('Delete exercise').click();
+    const after = await page.locator('.exercise-header').count();
+    expect(after).toBe(before - 1);
+  });
+
+  test('add day appends a new day to the plan', async ({ page }) => {
+    const before = await page.locator('.card.day-item').count();
+    await page.getByText('+ Add Day').click();
+    const after = await page.locator('.card.day-item').count();
+    expect(after).toBe(before + 1);
+  });
+
+  test('delete day removes it from the plan', async ({ page }) => {
+    const before = await page.locator('.card.day-item').count();
+    await page.locator('.card.day-item').first().click();
+    await page.getByText('Delete Day').click();
+    // Should navigate back to the plan list
+    await page.waitForSelector('.card.day-item');
+    const after = await page.locator('.card.day-item').count();
+    expect(after).toBe(before - 1);
+  });
 });
