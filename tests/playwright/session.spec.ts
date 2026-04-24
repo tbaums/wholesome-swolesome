@@ -135,6 +135,15 @@ test.describe('Session flow', () => {
   });
 
   // 11
+  test('workout nav button goes to day list while a session is active', async ({ page }) => {
+    await startWorkout(page, 0);
+    await page.locator('.nav-btn').filter({ hasText: 'Workout' }).click();
+    // Should be back on the home/day-list screen
+    await expect(page.locator('.btn.btn-secondary.btn-full').first()).toBeVisible();
+    await expect(page.locator('.btn-finish')).not.toBeVisible();
+  });
+
+  // 12
   test('finish workout saves session and navigates to history', async ({ page }) => {
     await startWorkout(page, 3);
     await completeAllSets(page);

@@ -148,11 +148,7 @@ fn BottomNav() -> impl IntoView {
         <nav class="bottom-nav">
             // Workout — dumbbell
             <button class="nav-btn" class:active=is_home on:click=move |_| {
-                if state.active_session.get_untracked().is_some() {
-                    state.navigate(View::Session { day_id: String::new() });
-                } else {
-                    state.navigate(View::Home);
-                }
+                state.navigate(View::Home);
             }>
                 <span class="icon">
                     <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
