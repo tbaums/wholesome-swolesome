@@ -86,6 +86,8 @@ pub struct SetLog {
 
 /// A single logged exercise in history — either from a named day session or a freeform log.
 /// Day-session entries share the same `session_id`; freeform entries have `session_id = None`.
+/// `finalized = true` means the freeform entry is closed (exercise-level ✓ was used);
+/// it stays in history permanently but is no longer the "active" entry for the Exercises tab.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExerciseEntry {
     pub id: String,
@@ -99,4 +101,6 @@ pub struct ExerciseEntry {
     pub reps_min: u32,
     pub reps_max: u32,
     pub sets: Vec<SetLog>,
+    #[serde(default)]
+    pub finalized: bool,
 }

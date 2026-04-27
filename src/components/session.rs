@@ -79,6 +79,7 @@ fn ActiveSession() -> impl IntoView {
                         reps_min: log.reps_min,
                         reps_max: log.reps_max,
                         sets: log.sets.clone(),
+                        finalized: true,
                     });
                 }
             });

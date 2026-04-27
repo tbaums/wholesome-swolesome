@@ -5,8 +5,8 @@ use crate::models::{ExerciseEntry, SetLog};
 
 // ── Freeform upsert helper ────────────────────────────────────────────────────
 
-/// Finds today's freeform ExerciseEntry for this exercise, or creates one
-/// pre-filled from the last completed set in history. Returns the index.
+/// Finds today's active (non-finalized) freeform ExerciseEntry for this exercise,
+/// or creates one pre-filled from the last completed set in history. Returns the index.
 fn get_or_create_freeform(
     h: &mut Vec<ExerciseEntry>,
     exercise_name: &str,
@@ -17,7 +17,7 @@ fn get_or_create_freeform(
     today: &str,
 ) -> usize {
     if let Some(i) = h.iter().position(|e| {
-        e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today
+        e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized
     }) {
         return i;
     }
@@ -45,6 +45,7 @@ fn get_or_create_freeform(
         reps_min,
         reps_max,
         sets,
+        finalized: false,
     });
     h.len() - 1
 }
@@ -145,7 +146,8 @@ fn ExerciseFreeformCard(
         }
     };
 
-    // set_indices is reactive: grows when the user adds a set
+    // set_indices is reactive: grows when the user adds a set.
+    // Skips finalized entries — those are closed history records, not the active session.
     let set_indices = {
         let exercise_name = exercise_name.clone();
         move || {
@@ -153,7 +155,7 @@ fn ExerciseFreeformCard(
             state.history
                 .get()
                 .iter()
-                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today)
+                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized)
                 .map(|e| (0..e.sets.len()).collect::<Vec<_>>())
                 .unwrap_or_else(|| (0..target_sets as usize).collect())
         }
@@ -181,33 +183,63 @@ fn ExerciseFreeformCard(
         }
     };
 
-    let is_complete = {
+    // Pending state: true during the 2-second window after the complete button is clicked.
+    let is_pending: RwSignal<bool> = RwSignal::new(false);
+
+    // Single complete button handler: save checked sets (finalize entry), close accordion after 2s.
+    let on_complete = {
         let exercise_name = exercise_name.clone();
-        move || {
-            let today = crate::app::current_date();
-            state.history
-                .get()
-                .iter()
-                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today)
-                .map(|e| !e.sets.is_empty() && e.sets.iter().all(|s| s.completed))
-                .unwrap_or(false)
+        move |_| {
+            if is_pending.get_untracked() { return; }
+            is_pending.set(true);
+            let exercise_name = exercise_name.clone();
+            let cb = wasm_bindgen::closure::Closure::once(move || {
+                let today = crate::app::current_date();
+                state.history.update(|h| {
+                    if let Some(i) = h.iter().position(|e| {
+                        e.exercise_name == exercise_name
+                            && e.day_name.is_none()
+                            && e.date == today
+                            && !e.finalized
+                    }) {
+                        let has_completed = h[i].sets.iter().any(|s| s.completed);
+                        if has_completed {
+                            h[i].sets.retain(|s| s.completed);
+                            h[i].finalized = true;
+                        } else {
+                            h.remove(i);
+                        }
+                    }
+                });
+                open_ex.set(None);
+                is_pending.set(false);
+            });
+            if let Some(window) = web_sys::window() {
+                let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    wasm_bindgen::JsCast::unchecked_ref::<js_sys::Function>(cb.as_ref()),
+                    2000,
+                );
+            }
+            cb.forget();
         }
     };
 
     let is_expanded2 = is_expanded.clone();
-    let is_complete2 = is_complete.clone();
 
     view! {
-        <div class="ex-card" class:ex-complete=is_complete>
+        <div class="ex-card">
             <div class="exercise-header">
                 <div>
                     <div class="card-title">{exercise_name.clone()}</div>
                     <div class="exercise-meta">{meta}</div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px">
-                    {move || is_complete2().then(|| view! {
-                        <span class="exercise-complete-badge">"✓"</span>
-                    })}
+                    <button
+                        class="ex-complete-btn"
+                        class:ex-complete-pending=is_pending
+                        style="-webkit-tap-highlight-color:transparent"
+                        on:click=on_complete
+                    >"✓"</button>
                     <span class="exercise-chevron" class:open=is_expanded on:click=toggle>"⌄"</span>
                 </div>
             </div>
@@ -265,7 +297,7 @@ fn FreeformSetRow(
             let today = crate::app::current_date();
             let history = state.history.get();
             if let Some(entry) = history.iter().find(|e| {
-                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today
+                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized
             }) {
                 return entry.sets.get(set_idx).map(|s| s.weight_lbs).unwrap_or(0.0);
             }
@@ -285,7 +317,7 @@ fn FreeformSetRow(
             let today = crate::app::current_date();
             let history = state.history.get();
             if let Some(entry) = history.iter().find(|e| {
-                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today
+                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized
             }) {
                 return entry.sets.get(set_idx).map(|s| s.reps).unwrap_or(reps_min);
             }
@@ -305,7 +337,7 @@ fn FreeformSetRow(
             let today = crate::app::current_date();
             state.history.get()
                 .iter()
-                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today)
+                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized)
                 .and_then(|e| e.sets.get(set_idx))
                 .map(|s| s.completed)
                 .unwrap_or(false)
