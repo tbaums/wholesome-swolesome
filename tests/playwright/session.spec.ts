@@ -154,4 +154,50 @@ test.describe('Session flow', () => {
       page.locator('.nav-btn').filter({ hasText: 'History' }),
     ).toHaveClass(/active/);
   });
+
+  // 13
+  test('finishing with no completed sets produces no history entries', async ({ page }) => {
+    await startWorkout(page, 3);
+    // Do not complete any sets — just finish
+    await page.locator('.btn-finish').click();
+    await expect(page.locator('.nav-btn').filter({ hasText: 'History' })).toHaveClass(/active/);
+    await expect(page.locator('.history-item')).toHaveCount(0);
+  });
+
+  // 14
+  test('only exercises with completed sets appear in history', async ({ page }) => {
+    await startWorkout(page, 0);
+    // Read exercise names before interacting
+    const cardTitles = page.locator('.card-title');
+    const firstName  = await cardTitles.nth(0).innerText();
+    const secondName = await cardTitles.nth(1).innerText();
+    // Complete all sets of only the first exercise
+    await openExercise(page, 0);
+    const body = page.locator('.exercise-body').first();
+    const doneBtns = body.locator('.set-done-btn');
+    const btnCount = await doneBtns.count();
+    for (let i = 0; i < btnCount; i++) {
+      await doneBtns.nth(i).evaluate((el: HTMLElement) => el.click());
+    }
+    await page.locator('.btn-finish').click();
+    await page.waitForSelector('.history-item');
+    await expect(page.locator('.history-item').filter({ hasText: firstName })).not.toHaveCount(0);
+    await expect(page.locator('.history-item').filter({ hasText: secondName })).toHaveCount(0);
+  });
+
+  // 15
+  test('only completed sets are saved — uncompleted sets do not appear in history', async ({ page }) => {
+    await startWorkout(page, 3); // Day 4: Recovery
+    await openExercise(page, 0);
+    // Complete only set 1, leave the rest unchecked
+    await page.locator('.exercise-body').first().locator('.set-done-btn').nth(0)
+      .evaluate((el: HTMLElement) => el.click());
+    await page.locator('.btn-finish').click();
+    await page.waitForSelector('.history-item');
+    // Open the detail view and verify exactly 1 completed set
+    await page.locator('.history-item').first().click();
+    await expect(page.locator('.progress-table')).toBeVisible();
+    await expect(page.locator('.progress-table tbody tr')).toHaveCount(1);
+    await expect(page.locator('.progress-table tbody tr').filter({ hasText: '✓' })).toHaveCount(1);
+  });
 });

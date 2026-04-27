@@ -71,9 +71,9 @@ fn ActiveSession() -> impl IntoView {
                     let mut by_date: std::collections::BTreeMap<String, Vec<crate::models::SetLog>> =
                         std::collections::BTreeMap::new();
                     for set in &log.sets {
-                        let date = set.completed_date.clone()
-                            .unwrap_or_else(|| session.date.clone());
-                        by_date.entry(date).or_default().push(set.clone());
+                        if let Some(date) = set.completed_date.clone() {
+                            by_date.entry(date).or_default().push(set.clone());
+                        }
                     }
                     for (date, sets) in by_date {
                         h.push(crate::models::ExerciseEntry {
