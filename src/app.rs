@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 
-use crate::models::{ExerciseLog, SetLog, WorkoutSession};
+use crate::models::{ExerciseEntry, ExerciseLog, SetLog, WorkoutSession};
 use crate::storage;
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -11,6 +11,7 @@ use crate::storage;
 pub enum View {
     Home,
     Session { day_id: String },
+    Exercises,
     History,
     SessionDetail { session_id: String },
     PlanEditor,
@@ -24,7 +25,7 @@ pub enum View {
 #[derive(Clone, Copy)]
 pub struct AppState {
     pub plan: RwSignal<crate::models::WorkoutPlan>,
-    pub history: RwSignal<Vec<WorkoutSession>>,
+    pub history: RwSignal<Vec<ExerciseEntry>>,
     pub active_session: RwSignal<Option<WorkoutSession>>,
     pub session_drafts: RwSignal<Vec<WorkoutSession>>,
     pub view: RwSignal<View>,
@@ -64,7 +65,7 @@ pub fn App() -> impl IntoView {
 
     let state = AppState {
         plan: RwSignal::new(storage::load_plan()),
-        history: RwSignal::new(storage::load_history()),
+        history: RwSignal::new(storage::load_exercise_history()),
         active_session: RwSignal::new(initial_session),
         session_drafts: RwSignal::new(storage::load_session_drafts()),
         view: RwSignal::new(initial_view),
@@ -79,7 +80,7 @@ pub fn App() -> impl IntoView {
 
     // Auto-save history whenever it changes
     Effect::new(move |_| {
-        storage::save_history(&state.history.get());
+        storage::save_exercise_history(&state.history.get());
     });
 
     // Auto-save active session on every change; clear when finished
@@ -112,6 +113,7 @@ fn CurrentView() -> impl IntoView {
         View::Session { day_id } => {
             view! { <crate::components::session::SessionView _day_id=day_id/> }.into_any()
         }
+        View::Exercises => view! { <crate::components::exercises::ExercisesView/> }.into_any(),
         View::History => view! { <crate::components::history::HistoryView/> }.into_any(),
         View::SessionDetail { session_id } => {
             view! { <crate::components::history::SessionDetailView session_id=session_id/> }
@@ -139,6 +141,7 @@ fn BottomNav() -> impl IntoView {
     let view = state.view;
 
     let is_home = move || matches!(view.get(), View::Home | View::Session { .. });
+    let is_exercises = move || matches!(view.get(), View::Exercises);
     let is_history = move || {
         matches!(view.get(), View::History | View::SessionDetail { .. } | View::Progress { .. })
     };
@@ -156,6 +159,20 @@ fn BottomNav() -> impl IntoView {
                     </svg>
                 </span>
                 <span>"Workout"</span>
+            </button>
+            // Exercises — list
+            <button class="nav-btn" class:active=is_exercises on:click=move |_| state.navigate(View::Exercises)>
+                <span class="icon">
+                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="8" y1="6" x2="21" y2="6"/>
+                        <line x1="8" y1="12" x2="21" y2="12"/>
+                        <line x1="8" y1="18" x2="21" y2="18"/>
+                        <line x1="3" y1="6" x2="3.01" y2="6"/>
+                        <line x1="3" y1="12" x2="3.01" y2="12"/>
+                        <line x1="3" y1="18" x2="3.01" y2="18"/>
+                    </svg>
+                </span>
+                <span>"Exercises"</span>
             </button>
             // Plan — clipboard
             <button class="nav-btn" class:active=is_plan on:click=move |_| state.navigate(View::PlanEditor)>
@@ -197,32 +214,37 @@ fn Toast() -> impl IntoView {
 // ── Session factory ───────────────────────────────────────────────────────────
 
 /// Creates a new WorkoutSession for `day_id`, pre-filling weights/reps from the
-/// most recent session for that day.
+/// most recent session for that day (looked up from the flat ExerciseEntry history).
 pub fn new_session(
     day_id: &str,
     plan: &crate::models::WorkoutPlan,
-    history: &[WorkoutSession],
+    history: &[ExerciseEntry],
 ) -> Option<WorkoutSession> {
     let day = plan.days.iter().find(|d| d.id == day_id)?;
 
-    let last = history
+    // Find the most recent session_id for this day
+    let last_session_id = history
         .iter()
         .rev()
-        .find(|s| s.day_id == day_id);
+        .filter(|e| e.day_id.as_deref() == Some(day_id))
+        .filter_map(|e| e.session_id.as_deref())
+        .next()
+        .map(|s| s.to_string());
 
     let exercise_logs: Vec<ExerciseLog> = day
         .exercises
         .iter()
         .map(|ex| {
-            let last_log = last.and_then(|s| {
-                s.exercise_logs
-                    .iter()
-                    .find(|l| l.exercise_id == ex.id)
-            });
-
-            // Use the last completed set's values as defaults
-            let (default_weight, default_reps) = last_log
-                .and_then(|l| l.sets.iter().filter(|s| s.completed).last())
+            let (default_weight, default_reps) = last_session_id
+                .as_deref()
+                .and_then(|sid| {
+                    history
+                        .iter()
+                        .find(|e| {
+                            e.session_id.as_deref() == Some(sid) && e.exercise_id == ex.id
+                        })
+                })
+                .and_then(|e| e.sets.iter().filter(|s| s.completed).last())
                 .map(|s| (s.weight_lbs, s.reps))
                 .unwrap_or((0.0, ex.reps_min));
 

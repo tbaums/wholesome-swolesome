@@ -1,3 +1,4 @@
+pub mod exercises;
 pub mod history;
 pub mod home;
 pub mod plan_editor;

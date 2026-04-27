@@ -66,10 +66,20 @@ fn ActiveSession() -> impl IntoView {
         });
         if let Some(session) = state.active_session.get() {
             state.history.update(|h| {
-                if let Some(pos) = h.iter().position(|s| s.id == session.id) {
-                    h[pos] = session.clone();
-                } else {
-                    h.push(session.clone());
+                for log in &session.exercise_logs {
+                    h.push(crate::models::ExerciseEntry {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        date: session.date.clone(),
+                        exercise_name: log.exercise_name.clone(),
+                        exercise_id: log.exercise_id.clone(),
+                        session_id: Some(session.id.clone()),
+                        day_id: Some(session.day_id.clone()),
+                        day_name: Some(session.day_name.clone()),
+                        target_sets: log.target_sets,
+                        reps_min: log.reps_min,
+                        reps_max: log.reps_max,
+                        sets: log.sets.clone(),
+                    });
                 }
             });
             state.active_session.set(None);

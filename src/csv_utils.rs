@@ -1,4 +1,4 @@
-use crate::models::{Exercise, ExerciseCategory, WorkoutDay, WorkoutPlan, WorkoutSession};
+use crate::models::{Exercise, ExerciseCategory, ExerciseEntry, WorkoutDay, WorkoutPlan};
 
 // ── Plan CSV ─────────────────────────────────────────────────────────────────
 //
@@ -86,25 +86,25 @@ pub fn import_plan_csv(csv: &str) -> Result<WorkoutPlan, String> {
 // ── History CSV ───────────────────────────────────────────────────────────────
 //
 // Format:
-//   session_id,date,day_name,exercise_name,set_number,reps,weight_lbs,completed
+//   entry_id,date,day_name,exercise_name,set_number,reps,weight_lbs,completed
+// day_name is empty for freeform entries.
 
-pub fn export_history_csv(history: &[WorkoutSession]) -> String {
-    let mut out = String::from("session_id,date,day_name,exercise_name,set_number,reps,weight_lbs,completed\n");
-    for session in history {
-        for log in &session.exercise_logs {
-            for set in &log.sets {
-                out.push_str(&format!(
-                    "{},{},{},{},{},{},{},{}\n",
-                    csv_field(&session.id),
-                    csv_field(&session.date),
-                    csv_field(&session.day_name),
-                    csv_field(&log.exercise_name),
-                    set.set_number,
-                    set.reps,
-                    set.weight_lbs,
-                    set.completed,
-                ));
-            }
+pub fn export_history_csv(history: &[ExerciseEntry]) -> String {
+    let mut out = String::from("entry_id,date,day_name,exercise_name,set_number,reps,weight_lbs,completed\n");
+    for entry in history {
+        let day_name = entry.day_name.as_deref().unwrap_or("");
+        for set in &entry.sets {
+            out.push_str(&format!(
+                "{},{},{},{},{},{},{},{}\n",
+                csv_field(&entry.id),
+                csv_field(&entry.date),
+                csv_field(day_name),
+                csv_field(&entry.exercise_name),
+                set.set_number,
+                set.reps,
+                set.weight_lbs,
+                set.completed,
+            ));
         }
     }
     out

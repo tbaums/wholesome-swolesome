@@ -103,22 +103,63 @@ fn DayGrid() -> impl IntoView {
 
 // ── Recent sessions ───────────────────────────────────────────────────────────
 
+/// A deduplicated session group derived from flat ExerciseEntry history.
+#[derive(Clone)]
+struct SessionGroup {
+    key: String,       // session_id, or "freeform-{date}"
+    label: String,     // day name or "Freeform"
+    date: String,
+    n_exercises: usize,
+    completed_sets: usize,
+}
+
 #[component]
 fn RecentSessions() -> impl IntoView {
     let state = expect_context::<AppState>();
 
     let recent = move || {
-        let mut h = state.history.get();
-        h.sort_by(|a, b| b.date.cmp(&a.date));
-        h.into_iter().take(5).collect::<Vec<_>>()
+        let entries = state.history.get();
+        let mut sorted = entries.clone();
+        sorted.sort_by(|a, b| b.date.cmp(&a.date).then(b.id.cmp(&a.id)));
+
+        let mut seen = std::collections::HashSet::new();
+        let mut groups: Vec<SessionGroup> = Vec::new();
+
+        for entry in &sorted {
+            let key = entry.session_id.clone()
+                .unwrap_or_else(|| format!("freeform-{}", entry.date));
+            if !seen.insert(key.clone()) { continue; }
+
+            let group_entries: Vec<_> = entries.iter().filter(|e| {
+                match (&entry.session_id, &e.session_id) {
+                    (Some(s1), Some(s2)) => s1 == s2,
+                    (None, None) => e.date == entry.date,
+                    _ => false,
+                }
+            }).collect();
+
+            groups.push(SessionGroup {
+                key,
+                label: entry.day_name.clone().unwrap_or_else(|| "Freeform".to_string()),
+                date: entry.date.clone(),
+                n_exercises: group_entries.len(),
+                completed_sets: group_entries.iter()
+                    .flat_map(|e| e.sets.iter())
+                    .filter(|s| s.completed)
+                    .count(),
+            });
+
+            if groups.len() >= 5 { break; }
+        }
+        groups
     };
 
     view! {
         <div class="card">
             <div class="card-title">"Recent Sessions"</div>
             {move || {
-                let sessions = recent();
-                if sessions.is_empty() {
+                let groups = recent();
+                if groups.is_empty() {
                     view! {
                         <div class="empty">
                             <div class="empty-icon">"📭"</div>
@@ -130,25 +171,21 @@ fn RecentSessions() -> impl IntoView {
                         <div>
                             <For
                                 each=move || recent()
-                                key=|s| s.id.clone()
-                                children=move |session| {
-                                    let session_id = session.id.clone();
-                                    let completed_sets: usize = session.exercise_logs.iter()
-                                        .map(|e| e.sets.iter().filter(|s| s.completed).count())
-                                        .sum();
+                                key=|g| g.key.clone()
+                                children=move |group| {
                                     view! {
                                         <div
                                             class="history-item card"
                                             style="cursor:pointer; margin-bottom:8px"
-                                            on:click=move |_| state.navigate(View::SessionDetail { session_id: session_id.clone() })
+                                            on:click=move |_| state.navigate(View::History)
                                         >
                                             <div>
-                                                <div class="fw-600">{session.day_name}</div>
-                                                <div class="history-date">{session.date}</div>
+                                                <div class="fw-600">{group.label}</div>
+                                                <div class="history-date">{group.date}</div>
                                             </div>
                                             <div class="history-stats">
-                                                <div>{session.exercise_logs.len()} " exercises"</div>
-                                                <div>{completed_sets} " sets done"</div>
+                                                <div>{group.n_exercises} " exercises"</div>
+                                                <div>{group.completed_sets} " sets done"</div>
                                             </div>
                                         </div>
                                     }

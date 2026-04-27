@@ -8,24 +8,22 @@ use crate::app::{AppState, View};
 pub fn ProgressView(exercise_name: String) -> impl IntoView {
     let state = expect_context::<AppState>();
 
-    // Gather all sessions that contain this exercise
+    // Gather all exercise entries for this exercise name
     let rows = {
         let exercise_name = exercise_name.clone();
         move || {
             let history = state.history.get();
-            let mut rows: Vec<(String, String, u32, f32, bool)> = Vec::new(); // (date, session_id, reps, weight, completed)
-            for session in &history {
-                for log in &session.exercise_logs {
-                    if log.exercise_name == exercise_name {
-                        for set in &log.sets {
-                            rows.push((
-                                session.date.clone(),
-                                session.day_name.clone(),
-                                set.reps,
-                                set.weight_lbs,
-                                set.completed,
-                            ));
-                        }
+            let mut rows: Vec<(String, String, u32, f32, bool)> = Vec::new(); // (date, _tag, reps, weight, completed)
+            for entry in &history {
+                if entry.exercise_name == exercise_name {
+                    for set in &entry.sets {
+                        rows.push((
+                            entry.date.clone(),
+                            entry.day_name.clone().unwrap_or_else(|| "Freeform".to_string()),
+                            set.reps,
+                            set.weight_lbs,
+                            set.completed,
+                        ));
                     }
                 }
             }

@@ -1,7 +1,7 @@
-use crate::models::{WorkoutPlan, WorkoutSession};
+use crate::models::{ExerciseEntry, WorkoutPlan, WorkoutSession};
 
 const PLAN_KEY: &str = "ws_plan";
-const HISTORY_KEY: &str = "ws_history";
+const EXERCISE_HISTORY_KEY: &str = "ws_ex_history";
 const SESSION_KEY: &str = "ws_active_session";
 const DRAFTS_KEY: &str = "ws_session_drafts";
 
@@ -22,16 +22,16 @@ pub fn save_plan(plan: &WorkoutPlan) {
     }
 }
 
-pub fn load_history() -> Vec<WorkoutSession> {
+pub fn load_exercise_history() -> Vec<ExerciseEntry> {
     local_storage()
-        .and_then(|s| s.get_item(HISTORY_KEY).ok().flatten())
+        .and_then(|s| s.get_item(EXERCISE_HISTORY_KEY).ok().flatten())
         .and_then(|json| serde_json::from_str(&json).ok())
         .unwrap_or_default()
 }
 
-pub fn save_history(history: &[WorkoutSession]) {
+pub fn save_exercise_history(history: &[ExerciseEntry]) {
     if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(history)) {
-        let _ = storage.set_item(HISTORY_KEY, &json);
+        let _ = storage.set_item(EXERCISE_HISTORY_KEY, &json);
     }
 }
 

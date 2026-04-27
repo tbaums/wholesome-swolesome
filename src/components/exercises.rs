@@ -1,0 +1,421 @@
+use leptos::prelude::*;
+
+use crate::app::AppState;
+use crate::models::{ExerciseEntry, SetLog};
+
+// ── Freeform upsert helper ────────────────────────────────────────────────────
+
+/// Finds today's freeform ExerciseEntry for this exercise, or creates one
+/// pre-filled from the last completed set in history. Returns the index.
+fn get_or_create_freeform(
+    h: &mut Vec<ExerciseEntry>,
+    exercise_name: &str,
+    exercise_id: &str,
+    target_sets: u32,
+    reps_min: u32,
+    reps_max: u32,
+    today: &str,
+) -> usize {
+    if let Some(i) = h.iter().position(|e| {
+        e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today
+    }) {
+        return i;
+    }
+    let (dw, dr) = h
+        .iter()
+        .rev()
+        .filter(|e| e.exercise_name == exercise_name)
+        .flat_map(|e| e.sets.iter())
+        .filter(|s| s.completed)
+        .next()
+        .map(|s| (s.weight_lbs, s.reps))
+        .unwrap_or((0.0, reps_min));
+    let sets = (1..=target_sets)
+        .map(|n| SetLog { set_number: n, reps: dr, weight_lbs: dw, completed: false })
+        .collect();
+    h.push(ExerciseEntry {
+        id: uuid::Uuid::new_v4().to_string(),
+        date: today.to_string(),
+        exercise_name: exercise_name.to_string(),
+        exercise_id: exercise_id.to_string(),
+        session_id: None,
+        day_id: None,
+        day_name: None,
+        target_sets,
+        reps_min,
+        reps_max,
+        sets,
+    });
+    h.len() - 1
+}
+
+// ── Exercises view ────────────────────────────────────────────────────────────
+
+#[component]
+pub fn ExercisesView() -> impl IntoView {
+    let state = expect_context::<AppState>();
+
+    let open_ex: RwSignal<Option<String>> = RwSignal::new(None);
+
+    // Compute popularity-sorted exercise list once on mount.
+    // Using get_untracked keeps the outer For stable so accordions
+    // don't collapse when history changes mid-session.
+    let exercise_names: Vec<String> = {
+        let plan = state.plan.get_untracked();
+        let history = state.history.get_untracked();
+
+        let mut counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for entry in &history {
+            *counts.entry(entry.exercise_name.clone()).or_insert(0) += 1;
+        }
+
+        let mut seen = std::collections::HashSet::new();
+        let mut names = Vec::new();
+        for day in &plan.days {
+            for ex in &day.exercises {
+                if seen.insert(ex.name.clone()) {
+                    names.push(ex.name.clone());
+                }
+            }
+        }
+
+        names.sort_by(|a, b| {
+            let ca = counts.get(a).copied().unwrap_or(0);
+            let cb = counts.get(b).copied().unwrap_or(0);
+            cb.cmp(&ca)
+        });
+        names
+    };
+
+    view! {
+        <div class="page">
+            <div class="page-header">
+                <h1 class="page-title">"Exercises"</h1>
+            </div>
+            <For
+                each=move || exercise_names.clone()
+                key=|name| name.clone()
+                children=move |exercise_name| {
+                    view! { <ExerciseFreeformCard exercise_name=exercise_name open_ex=open_ex/> }
+                }
+            />
+        </div>
+    }
+}
+
+// ── Exercise freeform card ────────────────────────────────────────────────────
+
+#[component]
+fn ExerciseFreeformCard(
+    exercise_name: String,
+    open_ex: RwSignal<Option<String>>,
+) -> impl IntoView {
+    let state = expect_context::<AppState>();
+
+    // Look up plan metadata once (untracked — plan changes rarely and we need
+    // stable values for closures).
+    let (exercise_id, target_sets, reps_min, reps_max) = state
+        .plan
+        .get_untracked()
+        .days
+        .iter()
+        .flat_map(|d| d.exercises.iter())
+        .find(|e| e.name == exercise_name)
+        .map(|e| (e.id.clone(), e.target_sets, e.reps_min, e.reps_max))
+        .unwrap_or_else(|| (String::new(), 3, 8, 12));
+
+    let meta = format!("{} sets × {}–{} reps", target_sets, reps_min, reps_max);
+
+    let is_expanded = {
+        let exercise_name = exercise_name.clone();
+        move || open_ex.get().as_deref() == Some(exercise_name.as_str())
+    };
+
+    let toggle = {
+        let exercise_name = exercise_name.clone();
+        move |_| {
+            open_ex.update(|opt| {
+                if opt.as_deref() == Some(exercise_name.as_str()) {
+                    *opt = None;
+                } else {
+                    *opt = Some(exercise_name.clone());
+                }
+            });
+        }
+    };
+
+    // set_indices is reactive: grows when the user adds a set
+    let set_indices = {
+        let exercise_name = exercise_name.clone();
+        move || {
+            let today = crate::app::current_date();
+            state.history
+                .get()
+                .iter()
+                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today)
+                .map(|e| (0..e.sets.len()).collect::<Vec<_>>())
+                .unwrap_or_else(|| (0..target_sets as usize).collect())
+        }
+    };
+
+    let add_set = {
+        let exercise_name = exercise_name.clone();
+        let exercise_id = exercise_id.clone();
+        move |_| {
+            let today = crate::app::current_date();
+            state.history.update(|h| {
+                let i = get_or_create_freeform(
+                    h, &exercise_name, &exercise_id,
+                    target_sets, reps_min, reps_max, &today,
+                );
+                let last = h[i].sets.last().cloned().unwrap_or_default();
+                let n = h[i].sets.len() as u32 + 1;
+                h[i].sets.push(SetLog {
+                    set_number: n,
+                    reps: last.reps,
+                    weight_lbs: last.weight_lbs,
+                    completed: false,
+                });
+            });
+        }
+    };
+
+    let is_complete = {
+        let exercise_name = exercise_name.clone();
+        move || {
+            let today = crate::app::current_date();
+            state.history
+                .get()
+                .iter()
+                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today)
+                .map(|e| !e.sets.is_empty() && e.sets.iter().all(|s| s.completed))
+                .unwrap_or(false)
+        }
+    };
+
+    let is_expanded2 = is_expanded.clone();
+    let is_complete2 = is_complete.clone();
+
+    view! {
+        <div class="ex-card" class:ex-complete=is_complete>
+            <div class="exercise-header">
+                <div>
+                    <div class="card-title">{exercise_name.clone()}</div>
+                    <div class="exercise-meta">{meta}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px">
+                    {move || is_complete2().then(|| view! {
+                        <span class="exercise-complete-badge">"✓"</span>
+                    })}
+                    <span class="exercise-chevron" class:open=is_expanded on:click=toggle>"⌄"</span>
+                </div>
+            </div>
+            <div class="exercise-body" class:open=is_expanded2>
+                <div>
+                    <div class="exercise-sets">
+                        <For
+                            each=set_indices
+                            key=|i| *i
+                            children={
+                                let exercise_name = exercise_name.clone();
+                                let exercise_id = exercise_id.clone();
+                                move |set_idx| {
+                                    let exercise_name = exercise_name.clone();
+                                    let exercise_id = exercise_id.clone();
+                                    view! {
+                                        <FreeformSetRow
+                                            exercise_name=exercise_name
+                                            exercise_id=exercise_id
+                                            target_sets=target_sets
+                                            reps_min=reps_min
+                                            reps_max=reps_max
+                                            set_idx=set_idx
+                                        />
+                                    }
+                                }
+                            }
+                        />
+                        <button class="add-set-btn" on:click=add_set>"+ Add Set"</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+// ── Freeform set row ──────────────────────────────────────────────────────────
+
+#[component]
+fn FreeformSetRow(
+    exercise_name: String,
+    exercise_id: String,
+    target_sets: u32,
+    reps_min: u32,
+    reps_max: u32,
+    set_idx: usize,
+) -> impl IntoView {
+    let state = expect_context::<AppState>();
+
+    // ── reactive readers ──────────────────────────────────────────────────────
+
+    let weight = {
+        let exercise_name = exercise_name.clone();
+        move || -> f32 {
+            let today = crate::app::current_date();
+            let history = state.history.get();
+            if let Some(entry) = history.iter().find(|e| {
+                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today
+            }) {
+                return entry.sets.get(set_idx).map(|s| s.weight_lbs).unwrap_or(0.0);
+            }
+            history.iter().rev()
+                .filter(|e| e.exercise_name == exercise_name)
+                .flat_map(|e| e.sets.iter())
+                .filter(|s| s.completed)
+                .next()
+                .map(|s| s.weight_lbs)
+                .unwrap_or(0.0)
+        }
+    };
+
+    let reps = {
+        let exercise_name = exercise_name.clone();
+        move || -> u32 {
+            let today = crate::app::current_date();
+            let history = state.history.get();
+            if let Some(entry) = history.iter().find(|e| {
+                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today
+            }) {
+                return entry.sets.get(set_idx).map(|s| s.reps).unwrap_or(reps_min);
+            }
+            history.iter().rev()
+                .filter(|e| e.exercise_name == exercise_name)
+                .flat_map(|e| e.sets.iter())
+                .filter(|s| s.completed)
+                .next()
+                .map(|s| s.reps)
+                .unwrap_or(reps_min)
+        }
+    };
+
+    let is_done = {
+        let exercise_name = exercise_name.clone();
+        move || {
+            let today = crate::app::current_date();
+            state.history.get()
+                .iter()
+                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today)
+                .and_then(|e| e.sets.get(set_idx))
+                .map(|s| s.completed)
+                .unwrap_or(false)
+        }
+    };
+
+    // ── event handlers ────────────────────────────────────────────────────────
+
+    let on_weight_change = {
+        let exercise_name = exercise_name.clone();
+        let exercise_id = exercise_id.clone();
+        move |e| {
+            let val: f32 = event_target_value(&e).parse().unwrap_or(0.0);
+            let today = crate::app::current_date();
+            state.history.update(|h| {
+                let i = get_or_create_freeform(
+                    h, &exercise_name, &exercise_id,
+                    target_sets, reps_min, reps_max, &today,
+                );
+                if let Some(set) = h[i].sets.get_mut(set_idx) {
+                    set.weight_lbs = val;
+                }
+            });
+        }
+    };
+
+    let on_reps_change = {
+        let exercise_name = exercise_name.clone();
+        let exercise_id = exercise_id.clone();
+        move |e| {
+            let val: u32 = event_target_value(&e).parse().unwrap_or(0);
+            let today = crate::app::current_date();
+            state.history.update(|h| {
+                let i = get_or_create_freeform(
+                    h, &exercise_name, &exercise_id,
+                    target_sets, reps_min, reps_max, &today,
+                );
+                if let Some(set) = h[i].sets.get_mut(set_idx) {
+                    set.reps = val;
+                }
+            });
+        }
+    };
+
+    let toggle_done = {
+        let exercise_name = exercise_name.clone();
+        let exercise_id = exercise_id.clone();
+        move |_| {
+            let today = crate::app::current_date();
+            state.history.update(|h| {
+                let i = get_or_create_freeform(
+                    h, &exercise_name, &exercise_id,
+                    target_sets, reps_min, reps_max, &today,
+                );
+                if let Some(set) = h[i].sets.get_mut(set_idx) {
+                    set.completed = !set.completed;
+                }
+            });
+        }
+    };
+
+    // ── derived display values ────────────────────────────────────────────────
+
+    let weight_str = move || {
+        let w = weight();
+        if w == 0.0 { String::new() }
+        else if w.fract() == 0.0 { format!("{:.0}", w) }
+        else { format!("{:.1}", w) }
+    };
+
+    let reps_str = move || {
+        let r = reps();
+        if r == 0 { String::new() } else { r.to_string() }
+    };
+
+    let is_done2 = is_done.clone();
+
+    view! {
+        <div class="set-row" class:set-done=is_done>
+            <span class="set-num">"Set " {set_idx + 1}</span>
+            <div class="set-inputs">
+                <input
+                    type="number"
+                    inputmode="decimal"
+                    step="2.5"
+                    min="0"
+                    class="set-num-input"
+                    placeholder="wt"
+                    prop:value=weight_str
+                    on:change=on_weight_change
+                />
+                <span class="set-x">"×"</span>
+                <input
+                    type="number"
+                    inputmode="numeric"
+                    step="1"
+                    min="0"
+                    class="set-num-input"
+                    placeholder="reps"
+                    prop:value=reps_str
+                    on:change=on_reps_change
+                />
+            </div>
+            <button
+                class="set-done-btn"
+                class:done=is_done2
+                on:click=toggle_done
+            >
+                "✓"
+            </button>
+        </div>
+    }
+}

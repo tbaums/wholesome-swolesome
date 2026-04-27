@@ -20,14 +20,11 @@ test.describe('History', () => {
     );
   });
 
-  test('clicking a session opens its detail view', async ({ page }) => {
+  test('clicking an entry opens its detail view', async ({ page }) => {
     await finishWorkout(page);
     await page.locator('.history-item').first().click();
-    // Detail view shows back button and exercise entries
     await expect(page.locator('.back-btn')).toBeVisible();
-    await expect(page.locator('.page-title')).toContainText(
-      'Recovery / Aerobic Base',
-    );
+    await expect(page.locator('.progress-table')).toBeVisible();
   });
 
   test('back button from session detail returns to history list', async ({ page }) => {

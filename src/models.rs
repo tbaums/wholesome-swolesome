@@ -83,3 +83,20 @@ pub struct SetLog {
     pub weight_lbs: f32,
     pub completed: bool,
 }
+
+/// A single logged exercise in history — either from a named day session or a freeform log.
+/// Day-session entries share the same `session_id`; freeform entries have `session_id = None`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ExerciseEntry {
+    pub id: String,
+    pub date: String,
+    pub exercise_name: String,
+    pub exercise_id: String,
+    pub session_id: Option<String>,
+    pub day_id: Option<String>,
+    pub day_name: Option<String>,
+    pub target_sets: u32,
+    pub reps_min: u32,
+    pub reps_max: u32,
+    pub sets: Vec<SetLog>,
+}
