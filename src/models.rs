@@ -82,6 +82,9 @@ pub struct SetLog {
     pub reps: u32,
     pub weight_lbs: f32,
     pub completed: bool,
+    /// Date (YYYY-MM-DD) when this set was checked off; None until completed.
+    #[serde(default)]
+    pub completed_date: Option<String>,
 }
 
 /// A single logged exercise in history — either from a named day session or a freeform log.
@@ -103,4 +106,7 @@ pub struct ExerciseEntry {
     pub sets: Vec<SetLog>,
     #[serde(default)]
     pub finalized: bool,
+    /// ISO 8601 timestamp when this entry was saved; empty string for legacy entries.
+    #[serde(default)]
+    pub created_at: String,
 }

@@ -1,5 +1,40 @@
 import { Page } from '@playwright/test';
 
+/** Register a JS Date mock that intercepts zero-arg `new Date()` and `Date.now()`.
+ *  Must be called before the page navigates (e.g. before freshPage).
+ *  The mock is active for all subsequent navigations in this test. */
+export async function enableDateMock(page: Page, initialIso: string) {
+  await page.addInitScript({
+    content: `(() => {
+      const RealDate = Date;
+      let mockMs = new RealDate(${JSON.stringify(initialIso)}).getTime();
+      class MockDate extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) super(mockMs);
+          else super(...args);
+        }
+        static now() { return mockMs; }
+        static advanceTo(isoStr) { mockMs = new RealDate(isoStr).getTime(); }
+      }
+      MockDate.parse = RealDate.parse.bind(RealDate);
+      MockDate.UTC = RealDate.UTC.bind(RealDate);
+      globalThis.Date = MockDate;
+    })();`,
+  });
+}
+
+/** Advance the mock date (must have called enableDateMock first). */
+export async function setMockDate(page: Page, isoStr: string) {
+  await page.evaluate((iso) => (globalThis as any).Date.advanceTo(iso), isoStr);
+}
+
+/** Compute the YYYY-MM-DD string the browser would derive from an ISO timestamp,
+ *  using the same local-time getters as the Rust current_date() function. */
+export function localDateStr(isoStr: string): string {
+  const d = new Date(isoStr);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export const BASE = 'http://localhost:8080';
 
 /** Reset localStorage and reload so every test starts from a known blank state. */

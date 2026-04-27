@@ -67,20 +67,31 @@ fn ActiveSession() -> impl IntoView {
         if let Some(session) = state.active_session.get() {
             state.history.update(|h| {
                 for log in &session.exercise_logs {
-                    h.push(crate::models::ExerciseEntry {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        date: session.date.clone(),
-                        exercise_name: log.exercise_name.clone(),
-                        exercise_id: log.exercise_id.clone(),
-                        session_id: Some(session.id.clone()),
-                        day_id: Some(session.day_id.clone()),
-                        day_name: Some(session.day_name.clone()),
-                        target_sets: log.target_sets,
-                        reps_min: log.reps_min,
-                        reps_max: log.reps_max,
-                        sets: log.sets.clone(),
-                        finalized: true,
-                    });
+                    // Group sets by their check-off date (fallback: session start date).
+                    let mut by_date: std::collections::BTreeMap<String, Vec<crate::models::SetLog>> =
+                        std::collections::BTreeMap::new();
+                    for set in &log.sets {
+                        let date = set.completed_date.clone()
+                            .unwrap_or_else(|| session.date.clone());
+                        by_date.entry(date).or_default().push(set.clone());
+                    }
+                    for (date, sets) in by_date {
+                        h.push(crate::models::ExerciseEntry {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            date,
+                            created_at: crate::app::current_datetime(),
+                            exercise_name: log.exercise_name.clone(),
+                            exercise_id: log.exercise_id.clone(),
+                            session_id: Some(session.id.clone()),
+                            day_id: Some(session.day_id.clone()),
+                            day_name: Some(session.day_name.clone()),
+                            target_sets: log.target_sets,
+                            reps_min: log.reps_min,
+                            reps_max: log.reps_max,
+                            sets,
+                            finalized: true,
+                        });
+                    }
                 }
             });
             state.active_session.set(None);
@@ -207,6 +218,7 @@ fn ExerciseCard(
                             reps: last.reps,
                             weight_lbs: last.weight_lbs,
                             completed: false,
+                            completed_date: None,
                         });
                     }
                 }
@@ -335,6 +347,11 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                     if let Some(log) = s.exercise_logs.iter_mut().find(|e| e.exercise_id == ex_id) {
                         if let Some(set) = log.sets.get_mut(set_idx) {
                             set.completed = !set.completed;
+                            set.completed_date = if set.completed {
+                                Some(crate::app::current_date())
+                            } else {
+                                None
+                            };
                         }
                     }
                 }

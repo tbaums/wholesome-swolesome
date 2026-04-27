@@ -31,11 +31,12 @@ fn get_or_create_freeform(
         .map(|s| (s.weight_lbs, s.reps))
         .unwrap_or((0.0, reps_min));
     let sets = (1..=target_sets)
-        .map(|n| SetLog { set_number: n, reps: dr, weight_lbs: dw, completed: false })
+        .map(|n| SetLog { set_number: n, reps: dr, weight_lbs: dw, completed: false, completed_date: None })
         .collect();
     h.push(ExerciseEntry {
         id: uuid::Uuid::new_v4().to_string(),
         date: today.to_string(),
+        created_at: crate::app::current_datetime(),
         exercise_name: exercise_name.to_string(),
         exercise_id: exercise_id.to_string(),
         session_id: None,
@@ -178,6 +179,7 @@ fn ExerciseFreeformCard(
                     reps: last.reps,
                     weight_lbs: last.weight_lbs,
                     completed: false,
+                    completed_date: None,
                 });
             });
         }
@@ -394,6 +396,11 @@ fn FreeformSetRow(
                 );
                 if let Some(set) = h[i].sets.get_mut(set_idx) {
                     set.completed = !set.completed;
+                    set.completed_date = if set.completed {
+                        Some(today.clone())
+                    } else {
+                        None
+                    };
                 }
             });
         }

@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
 
 use crate::app::{AppState, View};
 use crate::csv_utils::{download_file, export_history_csv};
@@ -11,9 +12,35 @@ pub fn HistoryView() -> impl IntoView {
 
     let sorted_entries = move || {
         let mut h = state.history.get();
-        h.sort_by(|a, b| b.date.cmp(&a.date).then(b.id.cmp(&a.id)));
+        // Ascending: oldest first. created_at is ISO 8601 so lexicographic = chronological.
+        // Fall back to date string for legacy entries that predate the created_at field.
+        h.sort_by(|a, b| {
+            let ka = if a.created_at.is_empty() { a.date.as_str() } else { a.created_at.as_str() };
+            let kb = if b.created_at.is_empty() { b.date.as_str() } else { b.created_at.as_str() };
+            ka.cmp(kb).then(a.id.cmp(&b.id))
+        });
         h
     };
+
+    // Scroll window to bottom after each render so the newest entry is visible.
+    Effect::new(move |_| {
+        let _ = state.history.get(); // re-run when history changes
+        let cb = wasm_bindgen::closure::Closure::once(|| {
+            if let Some(window) = web_sys::window() {
+                if let Some(doc) = window.document() {
+                    if let Some(body) = doc.body() {
+                        let _ = window.scroll_to_with_x_and_y(0.0, body.scroll_height() as f64);
+                    }
+                }
+            }
+        });
+        if let Some(window) = web_sys::window() {
+            let _ = window.request_animation_frame(
+                cb.as_ref().unchecked_ref::<js_sys::Function>(),
+            );
+        }
+        cb.forget();
+    });
 
     let export = move |_| {
         let csv = export_history_csv(&state.history.get());

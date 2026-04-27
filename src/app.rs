@@ -254,6 +254,7 @@ pub fn new_session(
                     reps: default_reps,
                     weight_lbs: default_weight,
                     completed: false,
+                    completed_date: None,
                 })
                 .collect();
 
@@ -286,4 +287,11 @@ pub fn current_date() -> String {
         date.get_month() + 1,
         date.get_date()
     )
+}
+
+pub fn current_datetime() -> String {
+    js_sys::Date::new_0()
+        .to_iso_string()
+        .as_string()
+        .unwrap_or_default()
 }
