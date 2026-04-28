@@ -28,10 +28,10 @@ fn get_or_create_freeform(
         .flat_map(|e| e.sets.iter())
         .filter(|s| s.completed)
         .next()
-        .map(|s| (s.weight_lbs, s.reps))
+        .map(|s| (s.weight, s.reps))
         .unwrap_or((0.0, reps_min));
     let sets = (1..=target_sets)
-        .map(|n| SetLog { set_number: n, reps: dr, weight_lbs: dw, completed: false, completed_date: None })
+        .map(|n| SetLog { set_number: n, reps: dr, weight: dw, completed: false, completed_date: None })
         .collect();
     h.push(ExerciseEntry {
         id: uuid::Uuid::new_v4().to_string(),
@@ -177,7 +177,7 @@ fn ExerciseFreeformCard(
                 h[i].sets.push(SetLog {
                     set_number: n,
                     reps: last.reps,
-                    weight_lbs: last.weight_lbs,
+                    weight: last.weight,
                     completed: false,
                     completed_date: None,
                 });
@@ -301,14 +301,14 @@ fn FreeformSetRow(
             if let Some(entry) = history.iter().find(|e| {
                 e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized
             }) {
-                return entry.sets.get(set_idx).map(|s| s.weight_lbs).unwrap_or(0.0);
+                return entry.sets.get(set_idx).map(|s| s.weight).unwrap_or(0.0);
             }
             history.iter().rev()
                 .filter(|e| e.exercise_name == exercise_name)
                 .flat_map(|e| e.sets.iter())
                 .filter(|s| s.completed)
                 .next()
-                .map(|s| s.weight_lbs)
+                .map(|s| s.weight)
                 .unwrap_or(0.0)
         }
     };
@@ -360,7 +360,7 @@ fn FreeformSetRow(
                     target_sets, reps_min, reps_max, &today,
                 );
                 if let Some(set) = h[i].sets.get_mut(set_idx) {
-                    set.weight_lbs = val;
+                    set.weight = val;
                 }
             });
         }

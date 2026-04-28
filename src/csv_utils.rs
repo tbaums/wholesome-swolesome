@@ -86,11 +86,11 @@ pub fn import_plan_csv(csv: &str) -> Result<WorkoutPlan, String> {
 // ── History CSV ───────────────────────────────────────────────────────────────
 //
 // Format:
-//   entry_id,date,day_name,exercise_name,set_number,reps,weight_lbs,completed
+//   entry_id,date,day_name,exercise_name,set_number,reps,weight,completed
 // day_name is empty for freeform entries.
 
 pub fn export_history_csv(history: &[ExerciseEntry]) -> String {
-    let mut out = String::from("entry_id,date,day_name,exercise_name,set_number,reps,weight_lbs,completed\n");
+    let mut out = String::from("entry_id,date,day_name,exercise_name,set_number,reps,weight,completed\n");
     for entry in history {
         let day_name = entry.day_name.as_deref().unwrap_or("");
         for set in &entry.sets {
@@ -102,7 +102,7 @@ pub fn export_history_csv(history: &[ExerciseEntry]) -> String {
                 csv_field(&entry.exercise_name),
                 set.set_number,
                 set.reps,
-                set.weight_lbs,
+                set.weight,
                 set.completed,
             ));
         }

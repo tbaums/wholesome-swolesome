@@ -21,7 +21,7 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
                             entry.date.clone(),
                             entry.day_name.clone().unwrap_or_else(|| "Freeform".to_string()),
                             set.reps,
-                            set.weight_lbs,
+                            set.weight,
                             set.completed,
                         ));
                     }
@@ -40,7 +40,7 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
         rows_for_best().iter()
             .filter(|(_, _, _, _, done)| *done)
             .max_by(|a, b| a.3.partial_cmp(&b.3).unwrap())
-            .map(|(date, _, reps, weight, _)| format!("{:.1} lbs × {} reps on {}", weight, reps, date))
+            .map(|(date, _, reps, weight, _)| format!("{:.1} × {} reps on {}", weight, reps, date))
     };
 
     view! {

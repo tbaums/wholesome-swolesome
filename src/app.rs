@@ -245,14 +245,14 @@ pub fn new_session(
                         })
                 })
                 .and_then(|e| e.sets.iter().filter(|s| s.completed).last())
-                .map(|s| (s.weight_lbs, s.reps))
+                .map(|s| (s.weight, s.reps))
                 .unwrap_or((0.0, ex.reps_min));
 
             let sets = (1..=ex.target_sets)
                 .map(|n| SetLog {
                     set_number: n,
                     reps: default_reps,
-                    weight_lbs: default_weight,
+                    weight: default_weight,
                     completed: false,
                     completed_date: None,
                 })

@@ -172,7 +172,7 @@ pub fn SessionDetailView(session_id: String) -> impl IntoView {
                                     <thead>
                                         <tr>
                                             <th>"Set"</th>
-                                            <th>"Weight (lbs)"</th>
+                                            <th>"Weight"</th>
                                             <th>"Reps"</th>
                                             <th>"Done"</th>
                                         </tr>
@@ -184,7 +184,7 @@ pub fn SessionDetailView(session_id: String) -> impl IntoView {
                                             children=|set| view! {
                                                 <tr>
                                                     <td>{set.set_number}</td>
-                                                    <td>{format!("{:.1}", set.weight_lbs)}</td>
+                                                    <td>{format!("{:.1}", set.weight)}</td>
                                                     <td>{set.reps}</td>
                                                     <td>{if set.completed { "✓" } else { "—" }}</td>
                                                 </tr>

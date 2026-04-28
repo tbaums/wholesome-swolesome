@@ -15,7 +15,7 @@ function makeEntry(id: string, exerciseName: string, date: string, createdAt: st
     target_sets: 3,
     reps_min: 8,
     reps_max: 12,
-    sets: [{ set_number: 1, reps: 10, weight_lbs: 100.0, completed: true, completed_date: date }],
+    sets: [{ set_number: 1, reps: 10, weight: 100.0, completed: true, completed_date: date }],
     finalized: true,
   };
 }

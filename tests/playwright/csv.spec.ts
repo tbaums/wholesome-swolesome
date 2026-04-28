@@ -136,7 +136,7 @@ test.describe('CSV import / export', () => {
     expect(download.suggestedFilename()).toBe('workout_history.csv');
     const path = await download.path();
     const content = await fs.readFile(path!, 'utf8');
-    expect(content).toMatch(/^entry_id,date,day_name,exercise_name,set_number,reps,weight_lbs,completed/);
+    expect(content).toMatch(/^entry_id,date,day_name,exercise_name,set_number,reps,weight,completed/);
     // At least one data row with completed=true
     expect(content).toContain('true');
   });

@@ -81,5 +81,5 @@ day_id,day_name,exercise_id,exercise_name,target_sets,reps_min,reps_max,category
 
 **History export** (`workout_history.csv`):
 ```
-session_id,date,day_name,exercise_name,set_number,reps,weight_lbs,completed
+session_id,date,day_name,exercise_name,set_number,reps,weight,completed
 ```

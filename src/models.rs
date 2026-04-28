@@ -80,7 +80,8 @@ pub struct ExerciseLog {
 pub struct SetLog {
     pub set_number: u32,
     pub reps: u32,
-    pub weight_lbs: f32,
+    #[serde(alias = "weight_lbs")]
+    pub weight: f32,
     pub completed: bool,
     /// Date (YYYY-MM-DD) when this set was checked off; None until completed.
     #[serde(default)]

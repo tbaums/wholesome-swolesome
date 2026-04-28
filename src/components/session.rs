@@ -216,7 +216,7 @@ fn ExerciseCard(
                         log.sets.push(crate::models::SetLog {
                             set_number: n,
                             reps: last.reps,
-                            weight_lbs: last.weight_lbs,
+                            weight: last.weight,
                             completed: false,
                             completed_date: None,
                         });
@@ -280,7 +280,7 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
             state.active_session.get()
                 .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
                 .and_then(|e| e.sets.get(set_idx).cloned())
-                .map(|s| s.weight_lbs)
+                .map(|s| s.weight)
                 .unwrap_or(0.0)
         }
     };
@@ -315,7 +315,7 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                 if let Some(s) = opt.as_mut() {
                     if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {
                         if let Some(set) = log.sets.get_mut(set_idx) {
-                            set.weight_lbs = val;
+                            set.weight = val;
                         }
                     }
                 }
