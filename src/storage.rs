@@ -1,9 +1,10 @@
-use crate::models::{ExerciseEntry, WorkoutPlan, WorkoutSession};
+use crate::models::{Exercise, ExerciseEntry, WorkoutPlan, WorkoutSession};
 
 const PLAN_KEY: &str = "ws_plan";
 const EXERCISE_HISTORY_KEY: &str = "ws_ex_history";
 const SESSION_KEY: &str = "ws_active_session";
 const DRAFTS_KEY: &str = "ws_session_drafts";
+const CUSTOM_EXERCISES_KEY: &str = "ws_custom_exercises";
 
 fn local_storage() -> Option<web_sys::Storage> {
     web_sys::window()?.local_storage().ok()?
@@ -51,6 +52,19 @@ pub fn load_session_drafts() -> Vec<WorkoutSession> {
 pub fn save_session_drafts(drafts: &[WorkoutSession]) {
     if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(drafts)) {
         let _ = storage.set_item(DRAFTS_KEY, &json);
+    }
+}
+
+pub fn load_custom_exercises() -> Vec<Exercise> {
+    local_storage()
+        .and_then(|s| s.get_item(CUSTOM_EXERCISES_KEY).ok().flatten())
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_custom_exercises(exercises: &[Exercise]) {
+    if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(exercises)) {
+        let _ = storage.set_item(CUSTOM_EXERCISES_KEY, &json);
     }
 }
 

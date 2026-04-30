@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 
-use crate::models::{ExerciseEntry, ExerciseLog, SetLog, WorkoutSession};
+use crate::models::{Exercise, ExerciseEntry, ExerciseLog, SetLog, WorkoutSession};
 use crate::storage;
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -28,6 +28,7 @@ pub struct AppState {
     pub history: RwSignal<Vec<ExerciseEntry>>,
     pub active_session: RwSignal<Option<WorkoutSession>>,
     pub session_drafts: RwSignal<Vec<WorkoutSession>>,
+    pub custom_exercises: RwSignal<Vec<Exercise>>,
     pub view: RwSignal<View>,
     pub toast: RwSignal<Option<String>>,
 }
@@ -68,30 +69,17 @@ pub fn App() -> impl IntoView {
         history: RwSignal::new(storage::load_exercise_history()),
         active_session: RwSignal::new(initial_session),
         session_drafts: RwSignal::new(storage::load_session_drafts()),
+        custom_exercises: RwSignal::new(storage::load_custom_exercises()),
         view: RwSignal::new(initial_view),
         toast: RwSignal::new(None),
     };
     provide_context(state);
 
-    // Auto-save plan whenever it changes
-    Effect::new(move |_| {
-        storage::save_plan(&state.plan.get());
-    });
-
-    // Auto-save history whenever it changes
-    Effect::new(move |_| {
-        storage::save_exercise_history(&state.history.get());
-    });
-
-    // Auto-save active session on every change; clear when finished
-    Effect::new(move |_| {
-        storage::save_active_session(&state.active_session.get());
-    });
-
-    // Auto-save session drafts
-    Effect::new(move |_| {
-        storage::save_session_drafts(&state.session_drafts.get());
-    });
+    Effect::new(move |_| { storage::save_plan(&state.plan.get()); });
+    Effect::new(move |_| { storage::save_exercise_history(&state.history.get()); });
+    Effect::new(move |_| { storage::save_active_session(&state.active_session.get()); });
+    Effect::new(move |_| { storage::save_session_drafts(&state.session_drafts.get()); });
+    Effect::new(move |_| { storage::save_custom_exercises(&state.custom_exercises.get()); });
 
     view! {
         <div id="app">

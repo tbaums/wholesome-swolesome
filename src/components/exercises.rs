@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
 use crate::app::AppState;
-use crate::models::{ExerciseEntry, SetLog};
+use crate::models::{Exercise, ExerciseCategory, ExerciseEntry, SetLog};
 
 // ── Freeform upsert helper ────────────────────────────────────────────────────
 
@@ -59,11 +59,11 @@ pub fn ExercisesView() -> impl IntoView {
 
     let open_ex: RwSignal<Option<String>> = RwSignal::new(None);
 
-    // Compute popularity-sorted exercise list once on mount.
-    // Using get_untracked keeps the outer For stable so accordions
-    // don't collapse when history changes mid-session.
-    let exercise_names: Vec<String> = {
+    // Popularity-sorted initial snapshot. Stored as a signal so newly created
+    // exercises can be appended without re-sorting (and collapsing open accordions).
+    let exercise_names: RwSignal<Vec<String>> = RwSignal::new({
         let plan = state.plan.get_untracked();
+        let custom = state.custom_exercises.get_untracked();
         let history = state.history.get_untracked();
 
         let mut counts: std::collections::HashMap<String, usize> =
@@ -81,13 +81,48 @@ pub fn ExercisesView() -> impl IntoView {
                 }
             }
         }
-
+        for ex in &custom {
+            if seen.insert(ex.name.clone()) {
+                names.push(ex.name.clone());
+            }
+        }
         names.sort_by(|a, b| {
             let ca = counts.get(a).copied().unwrap_or(0);
             let cb = counts.get(b).copied().unwrap_or(0);
             cb.cmp(&ca)
         });
         names
+    });
+
+    let show_form: RwSignal<bool> = RwSignal::new(false);
+    let new_name: RwSignal<String> = RwSignal::new(String::new());
+    let new_sets: RwSignal<u32> = RwSignal::new(3);
+    let new_reps_min: RwSignal<u32> = RwSignal::new(8);
+    let new_reps_max: RwSignal<u32> = RwSignal::new(12);
+
+    let save_exercise = move |_| {
+        let name = new_name.get().trim().to_string();
+        if name.is_empty() { return; }
+        state.custom_exercises.update(|v| v.push(Exercise {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: name.clone(),
+            target_sets: new_sets.get(),
+            reps_min: new_reps_min.get(),
+            reps_max: new_reps_max.get(),
+            category: ExerciseCategory::Main,
+            notes: None,
+        }));
+        exercise_names.update(|v| v.push(name));
+        new_name.set(String::new());
+        new_sets.set(3);
+        new_reps_min.set(8);
+        new_reps_max.set(12);
+        show_form.set(false);
+    };
+
+    let cancel = move |_| {
+        new_name.set(String::new());
+        show_form.set(false);
     };
 
     view! {
@@ -96,12 +131,88 @@ pub fn ExercisesView() -> impl IntoView {
                 <h1 class="page-title">"Exercises"</h1>
             </div>
             <For
-                each=move || exercise_names.clone()
+                each=move || exercise_names.get()
                 key=|name| name.clone()
                 children=move |exercise_name| {
                     view! { <ExerciseFreeformCard exercise_name=exercise_name open_ex=open_ex/> }
                 }
             />
+
+            {move || if show_form.get() {
+                view! {
+                    <div class="new-exercise-form card" style="margin-top:12px">
+                        <div class="form-group">
+                            <label>"Exercise name"</label>
+                            <input
+                                type="text"
+                                placeholder="Exercise name"
+                                class="form-input"
+                                prop:value=move || new_name.get()
+                                on:input=move |e| new_name.set(event_target_value(&e))
+                            />
+                        </div>
+                        <div style="display:flex; gap:8px; margin-top:8px">
+                            <div class="form-group" style="flex:1">
+                                <label>"Sets"</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    class="form-input"
+                                    prop:value=move || new_sets.get().to_string()
+                                    on:change=move |e| {
+                                        new_sets.set(event_target_value(&e).parse().unwrap_or(3));
+                                    }
+                                />
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>"Reps min"</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    class="form-input"
+                                    prop:value=move || new_reps_min.get().to_string()
+                                    on:change=move |e| {
+                                        new_reps_min.set(event_target_value(&e).parse().unwrap_or(8));
+                                    }
+                                />
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>"Reps max"</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    class="form-input"
+                                    prop:value=move || new_reps_max.get().to_string()
+                                    on:change=move |e| {
+                                        new_reps_max.set(event_target_value(&e).parse().unwrap_or(12));
+                                    }
+                                />
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:8px; margin-top:12px">
+                            <button
+                                class="btn btn-primary"
+                                style="flex:1"
+                                disabled=move || new_name.get().trim().is_empty()
+                                on:click=save_exercise
+                            >"Add"</button>
+                            <button
+                                class="btn btn-secondary"
+                                style="flex:1"
+                                on:click=cancel
+                            >"Cancel"</button>
+                        </div>
+                    </div>
+                }.into_any()
+            } else {
+                view! {
+                    <button
+                        class="btn btn-secondary btn-full new-exercise-btn"
+                        style="margin-top:12px"
+                        on:click=move |_| show_form.set(true)
+                    >"+ New Exercise"</button>
+                }.into_any()
+            }}
         </div>
     }
 }
@@ -115,14 +226,14 @@ fn ExerciseFreeformCard(
 ) -> impl IntoView {
     let state = expect_context::<AppState>();
 
-    // Look up plan metadata once (untracked — plan changes rarely and we need
-    // stable values for closures).
-    let (exercise_id, target_sets, reps_min, reps_max) = state
-        .plan
-        .get_untracked()
+    // Look up metadata from the plan first, then fall back to custom exercises.
+    let plan = state.plan.get_untracked();
+    let custom = state.custom_exercises.get_untracked();
+    let (exercise_id, target_sets, reps_min, reps_max) = plan
         .days
         .iter()
         .flat_map(|d| d.exercises.iter())
+        .chain(custom.iter())
         .find(|e| e.name == exercise_name)
         .map(|e| (e.id.clone(), e.target_sets, e.reps_min, e.reps_max))
         .unwrap_or_else(|| (String::new(), 3, 8, 12));
