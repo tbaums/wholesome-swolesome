@@ -30,6 +30,45 @@ trunk serve          # dev server at http://localhost:8080
 trunk build --release --public-url /wholesome-swolesome/  # production build
 ```
 
+## Importing a workout plan
+
+Go to **Plan → Import / Export → Import Plan** and paste a CSV with this header:
+
+```
+day_id,day_name,exercise_id,exercise_name,target_sets,reps_min,reps_max,category,notes
+```
+
+**Column reference**
+
+| Column | Required | Notes |
+|--------|----------|-------|
+| `day_id` | Yes | Arbitrary string that groups exercises into the same day. Rows with the same `day_id` become one day. |
+| `day_name` | Yes | Display name for the day, e.g. `Lower A`. |
+| `exercise_id` | No | Leave blank to auto-generate a UUID. Supply one if you want stable IDs across re-imports. |
+| `exercise_name` | Yes | Display name for the exercise. |
+| `target_sets` | Yes | Integer — how many sets to pre-fill. |
+| `reps_min` | Yes | Integer — lower end of the rep range. |
+| `reps_max` | Yes | Integer — upper end of the rep range. |
+| `category` | Yes | `Main`, `Core`, or `Cardio` (case-insensitive). Anything else is treated as `Main`. |
+| `notes` | No | Free text. Can be empty or omitted. |
+
+**Example**
+
+```csv
+day_id,day_name,exercise_id,exercise_name,target_sets,reps_min,reps_max,category,notes
+d1,Lower A,,Hip Thrust,4,6,10,Main,
+d1,Lower A,,Romanian Deadlift,3,8,12,Main,
+d1,Lower A,,Leg Press,3,10,15,Main,
+d2,Upper A,,Bench Press,4,5,8,Main,
+d2,Upper A,,Pull-Up,3,6,10,Main,
+d3,Core,,Plank,3,30,60,Core,seconds not reps
+```
+
+- The header row is required.
+- Empty rows are ignored.
+- Importing replaces your entire current plan — export first if you want a backup.
+- You can download your existing plan as a starting point via **Download Plan CSV**.
+
 ## Data model
 
 ### Storage keys (localStorage)
