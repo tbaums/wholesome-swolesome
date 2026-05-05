@@ -86,8 +86,8 @@ pub fn HistoryView() -> impl IntoView {
                                                 session_id: entry_id.clone()
                                             })
                                         >
-                                            <div style="display:flex; justify-content:space-between; align-items:flex-start">
-                                                <div>
+                                            <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%">
+                                                <div style="min-width:0">
                                                     <div class="fw-600">{entry.exercise_name}</div>
                                                     <div class="history-date">{entry.date}</div>
                                                     <div class="text-muted text-sm" style="margin-top:2px">

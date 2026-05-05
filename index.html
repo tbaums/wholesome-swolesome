@@ -46,6 +46,7 @@
       margin: 0 auto;
       min-height: 100vh;
       background: var(--bg);   /* dark purple inside the column */
+      padding-top: env(safe-area-inset-top);
     }
 
     /* ── Animations ── */
@@ -477,7 +478,7 @@
     }
 
     .history-date  { font-size: 13px; color: var(--text-muted); }
-    .history-stats { font-size: 13px; color: var(--text-muted); text-align: right; }
+    .history-stats { font-size: 13px; color: var(--text-muted); text-align: right; flex-shrink: 0; margin-left: 8px; }
 
     /* ── Plan editor ── */
     .day-item {
