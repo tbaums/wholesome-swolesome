@@ -49,6 +49,19 @@
       padding-top: env(safe-area-inset-top);
     }
 
+    /* Fixed overlay that permanently covers the status bar area so
+       scrolling content never bleeds under the clock/battery/signal. */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: env(safe-area-inset-top);
+      background: var(--bg);
+      z-index: 9999;
+    }
+
     /* ── Animations ── */
     @keyframes popIn {
       0%   { transform: scale(0.7); }
