@@ -46,11 +46,18 @@ jobs:
         with:
           version: latest
 
-      - name: Install chromedriver
-        uses: nanasess/setup-chromedriver@v2
+      # Firefox + geckodriver instead of chromedriver: on Linux CI runners,
+      # chromedriver intermittently fails to bind a port because the host
+      # network refuses IPv6 sockets ("Address family not supported"). Firefox
+      # avoids that whole class of failure.
+      - name: Install Firefox
+        uses: browser-actions/setup-firefox@v1
 
-      - name: WASM unit tests (Chrome)
-        run: wasm-pack test --headless --chrome --lib
+      - name: Install geckodriver
+        uses: browser-actions/setup-geckodriver@latest
+
+      - name: WASM unit tests (Firefox)
+        run: wasm-pack test --headless --firefox --lib
 
   e2e:
     name: Playwright E2E (WebKit / iPhone 15)
@@ -104,6 +111,17 @@ jobs:
       - name: Install Playwright (WebKit)
         run: npx playwright install --with-deps webkit
 
+      # Diagnostic: surface tool versions and PATH so a failed run is easier
+      # to triage from the action log without needing to add more steps.
+      - name: Diagnostic — tool versions
+        run: |
+          echo "PATH=$PATH"
+          which trunk && trunk --version
+          which node && node --version
+          which npx && npx --version
+          rustc --version
+          cargo --version
+
       # Pre-build so the trunk dev server doesn't time-bomb during the test
       # webServer startup (120s) on a cold cargo target cache.
       - name: Warm wasm build
@@ -114,10 +132,24 @@ jobs:
         env:
           CI: 'true'
 
-      - name: Upload Playwright report on failure
-        if: failure()
+      # Upload report regardless of pass/fail so we have something to look at
+      # when a flake or env issue surfaces. Use if: always() rather than
+      # failure() because the report is also useful for inspecting a green
+      # run.
+      - name: Upload Playwright report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload trunk dist on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trunk-dist
+          path: dist/
+          retention-days: 7
+          if-no-files-found: ignore

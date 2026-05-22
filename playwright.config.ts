@@ -4,6 +4,10 @@ export default defineConfig({
   testDir: './tests/playwright',
   timeout: 30_000,
   retries: process.env.CI ? 2 : 0,
+  // Always emit the html report so CI can upload it as a debugging artifact.
+  reporter: process.env.CI
+    ? [['list'], ['html', { open: 'never' }]]
+    : [['list']],
   projects: [
     {
       name: 'iPhone 15',
