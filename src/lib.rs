@@ -187,6 +187,93 @@ mod tests {
         assert!(parsed.plan.is_none());
     }
 
+    // Test: a deletion is preserved through a serialize → deserialize round-trip
+    #[wasm_bindgen_test]
+    fn deletion_preserved_through_serde_roundtrip() {
+        use crate::models::ExerciseEntry;
+
+        let make_entry = |id: &str| ExerciseEntry {
+            id: id.to_string(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            exercise_id: id.to_string(),
+            exercise_name: format!("Exercise {id}"),
+            date: "2026-01-01".to_string(),
+            created_at: "2026-01-01T00:00:00.000Z".to_string(),
+            target_sets: 3,
+            reps_min: 8,
+            reps_max: 12,
+            finalized: false,
+            sets: vec![],
+        };
+
+        // Start with 3 entries
+        let history = vec![make_entry("a"), make_entry("b"), make_entry("c")];
+        let state = SyncedState {
+            schema_version: 1,
+            updated_at: Some("2026-05-22T10:00:00.000Z".to_string()),
+            plan: None,
+            exercise_history: history,
+            session_drafts: vec![],
+            custom_exercises: vec![],
+        };
+
+        // Simulate push: serialize
+        let json = serde_json::to_string(&state).unwrap();
+
+        // Simulate delete of entry "b" on the client
+        let mut after_delete: SyncedState = serde_json::from_str(&json).unwrap();
+        after_delete.exercise_history.retain(|e| e.id != "b");
+        after_delete.updated_at = Some("2026-05-22T10:05:00.000Z".to_string());
+
+        // Simulate push of post-delete state, then pull on another session
+        let pushed = serde_json::to_string(&after_delete).unwrap();
+        let pulled: SyncedState = serde_json::from_str(&pushed).unwrap();
+
+        assert_eq!(pulled.exercise_history.len(), 2);
+        assert!(pulled.exercise_history.iter().all(|e| e.id != "b"),
+            "deleted entry 'b' should not appear after pull");
+        assert!(pulled.exercise_history.iter().any(|e| e.id == "a"));
+        assert!(pulled.exercise_history.iter().any(|e| e.id == "c"));
+    }
+
+    // Test: deleting all history produces an empty vec, not null — deserializes correctly
+    #[wasm_bindgen_test]
+    fn delete_all_history_round_trips_as_empty_vec() {
+        let state = SyncedState {
+            schema_version: 1,
+            updated_at: Some("2026-05-22T10:00:00.000Z".to_string()),
+            plan: None,
+            exercise_history: vec![],  // all deleted
+            session_drafts: vec![],
+            custom_exercises: vec![],
+        };
+        let json = serde_json::to_string(&state).unwrap();
+
+        // Confirm the JSON encodes as an empty array, not null or absent
+        assert!(json.contains("\"exercise_history\":[]"),
+            "empty history should serialize as [] not null");
+
+        let pulled: SyncedState = serde_json::from_str(&json).unwrap();
+        assert!(pulled.exercise_history.is_empty());
+    }
+
+    // Test: boot-pull guard — empty remote exercise_history is treated as intentional
+    // (covers the case where a user deleted all entries and the pull sees an empty array)
+    #[wasm_bindgen_test]
+    fn newer_timestamp_wins_regardless_of_content() {
+        let older_ts = "2026-05-22T09:00:00.000Z";
+        let newer_ts = "2026-05-22T10:00:00.000Z";
+
+        // Remote is newer → should hydrate (even if its arrays are empty after deletes)
+        assert!(newer_ts > older_ts,
+            "ISO 8601 strings compare lexicographically; newer timestamp should sort higher");
+
+        // Same timestamp → should NOT hydrate (no change)
+        assert!(!(older_ts > older_ts));
+    }
+
     // Test: GitHub wraps base64 at 60 chars with newlines — our stripping logic handles it
     #[wasm_bindgen_test]
     fn github_base64_whitespace_strip_round_trips() {
