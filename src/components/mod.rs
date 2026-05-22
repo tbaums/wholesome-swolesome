@@ -1,6 +1,7 @@
 pub mod exercises;
 pub mod history;
 pub mod home;
+pub mod options;
 pub mod plan_editor;
 pub mod progress;
 pub mod session;

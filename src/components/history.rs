@@ -51,9 +51,17 @@ pub fn HistoryView() -> impl IntoView {
         <div class="page">
             <div class="page-header">
                 <h1 class="page-title">"History"</h1>
-                <button class="btn btn-secondary btn-sm" style="margin-left:auto" on:click=export>
-                    "Export CSV"
-                </button>
+                <div style="margin-left:auto; display:flex; gap:8px">
+                    <button
+                        class="btn btn-secondary btn-sm"
+                        on:click=move |_| state.navigate(View::Options)
+                    >
+                        "Options"
+                    </button>
+                    <button class="btn btn-secondary btn-sm" on:click=export>
+                        "Export CSV"
+                    </button>
+                </div>
             </div>
 
             {move || {

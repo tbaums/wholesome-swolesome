@@ -4,6 +4,7 @@ mod csv_utils;
 mod models;
 mod seed;
 mod storage;
+mod sync;
 
 use app::App;
 

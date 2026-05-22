@@ -1,9 +1,11 @@
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 
 use crate::models::{Exercise, ExerciseEntry, ExerciseLog, SetLog, WorkoutSession};
 use crate::storage;
+use crate::sync;
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
@@ -18,6 +20,7 @@ pub enum View {
     DayEditor { day_id: String },
     Progress { exercise_name: String },
     ImportExport,
+    Options,
 }
 
 // ── Global state ──────────────────────────────────────────────────────────────
@@ -31,6 +34,9 @@ pub struct AppState {
     pub custom_exercises: RwSignal<Vec<Exercise>>,
     pub view: RwSignal<View>,
     pub toast: RwSignal<Option<String>>,
+    pub sync_sha: RwSignal<Option<String>>,
+    pub last_synced_at: RwSignal<Option<String>>,
+    pub suppress_push: RwSignal<bool>,
 }
 
 impl AppState {
@@ -72,8 +78,57 @@ pub fn App() -> impl IntoView {
         custom_exercises: RwSignal::new(storage::load_custom_exercises()),
         view: RwSignal::new(initial_view),
         toast: RwSignal::new(None),
+        sync_sha: RwSignal::new(None),
+        last_synced_at: RwSignal::new(storage::load_last_push_at()),
+        suppress_push: RwSignal::new(false),
     };
     provide_context(state);
+
+    // Becomes true once the boot pull attempt completes (whether or not it pulled).
+    // The debounced push Effect checks this to avoid pushing data before pull finishes.
+    let boot_done = RwSignal::new(false);
+    let debounce_handle: StoredValue<Option<i32>> = StoredValue::new(None);
+
+    // Boot-time pull: updates signals directly. boot_done is false during hydration
+    // so the debounce Effect ignores these signal changes.
+    spawn_local(async move {
+        let cfg = storage::load_sync_config();
+        if cfg.is_configured() {
+            match sync::fetch_state(&cfg.to_github_config()).await {
+                Ok(remote) => {
+                    state.sync_sha.set(Some(remote.sha));
+                    let Some(remote_ts) = remote.state.updated_at.as_deref() else {
+                        boot_done.set(true);
+                        return;
+                    };
+                    let should_hydrate = match storage::load_last_push_at().as_deref() {
+                        None => true,
+                        Some(local_ts) => remote_ts > local_ts,
+                    };
+                    if should_hydrate {
+                        if let Some(plan) = remote.state.plan {
+                            state.plan.set(plan);
+                        }
+                        if !remote.state.exercise_history.is_empty() {
+                            state.history.set(remote.state.exercise_history);
+                        }
+                        if !remote.state.session_drafts.is_empty() {
+                            state.session_drafts.set(remote.state.session_drafts);
+                        }
+                        if !remote.state.custom_exercises.is_empty() {
+                            state.custom_exercises.set(remote.state.custom_exercises);
+                        }
+                        storage::save_last_push_at(remote_ts);
+                        state.last_synced_at.set(Some(remote_ts.to_string()));
+                        state.show_toast("Synced from GitHub ↓");
+                    }
+                }
+                Err(sync::SyncError::NotFound) => {}
+                Err(e) => leptos::logging::warn!("Boot sync pull failed: {e}"),
+            }
+        }
+        boot_done.set(true);
+    });
 
     Effect::new(move |_| { storage::save_plan(&state.plan.get()); });
     Effect::new(move |_| { storage::save_exercise_history(&state.history.get()); });
@@ -81,12 +136,82 @@ pub fn App() -> impl IntoView {
     Effect::new(move |_| { storage::save_session_drafts(&state.session_drafts.get()); });
     Effect::new(move |_| { storage::save_custom_exercises(&state.custom_exercises.get()); });
 
+    // Debounced push: 2s after any data signal changes, push to GitHub.
+    // Skips first run (initial render from localStorage) and skips until boot_done.
+    Effect::new(move |prev: Option<()>| {
+        let _ = (
+            state.plan.get(),
+            state.history.get(),
+            state.session_drafts.get(),
+            state.custom_exercises.get(),
+        );
+        if prev.is_none() || !boot_done.get_untracked() || state.suppress_push.get_untracked() {
+            return;
+        }
+        if let Some(handle) = debounce_handle.get_value() {
+            if let Some(window) = web_sys::window() {
+                window.clear_timeout_with_handle(handle);
+            }
+        }
+        let cfg = storage::load_sync_config();
+        if !cfg.is_configured() {
+            return;
+        }
+        let cb = Closure::once(move || {
+            let synced = build_synced_state(state);
+            let gh_cfg = cfg.to_github_config();
+            let sha = state.sync_sha.get_untracked();
+            spawn_local(async move {
+                match sync::push_state(&gh_cfg, &synced, sha.as_deref()).await {
+                    Ok(new_sha) => {
+                        state.sync_sha.set(Some(new_sha));
+                        let ts = current_datetime();
+                        storage::save_last_push_at(&ts);
+                        state.last_synced_at.set(Some(ts));
+                    }
+                    Err(sync::SyncError::Conflict) => {
+                        if let Ok(remote) = sync::fetch_state(&gh_cfg).await {
+                            let new_sha = remote.sha.clone();
+                            state.sync_sha.set(Some(new_sha.clone()));
+                            if let Ok(s) = sync::push_state(&gh_cfg, &synced, Some(&new_sha)).await {
+                                state.sync_sha.set(Some(s));
+                                let ts = current_datetime();
+                                storage::save_last_push_at(&ts);
+                                state.last_synced_at.set(Some(ts));
+                            }
+                        }
+                    }
+                    Err(e) => leptos::logging::warn!("Auto-push failed: {e}"),
+                }
+            });
+        });
+        let handle = web_sys::window().and_then(|w| {
+            w.set_timeout_with_callback_and_timeout_and_arguments_0(
+                cb.as_ref().unchecked_ref::<js_sys::Function>(),
+                2000,
+            ).ok()
+        });
+        cb.forget();
+        debounce_handle.set_value(handle);
+    });
+
     view! {
         <div id="app">
             <CurrentView/>
             <BottomNav/>
             <Toast/>
         </div>
+    }
+}
+
+pub fn build_synced_state(state: AppState) -> sync::SyncedState {
+    sync::SyncedState {
+        schema_version: 1,
+        updated_at: Some(current_datetime()),
+        plan: Some(state.plan.get_untracked()),
+        exercise_history: state.history.get_untracked(),
+        session_drafts: state.session_drafts.get_untracked(),
+        custom_exercises: state.custom_exercises.get_untracked(),
     }
 }
 
@@ -118,6 +243,7 @@ fn CurrentView() -> impl IntoView {
         View::ImportExport => {
             view! { <crate::components::plan_editor::ImportExportView/> }.into_any()
         }
+        View::Options => view! { <crate::components::options::OptionsView/> }.into_any(),
     }
 }
 
@@ -131,7 +257,10 @@ fn BottomNav() -> impl IntoView {
     let is_home = move || matches!(view.get(), View::Home | View::Session { .. });
     let is_exercises = move || matches!(view.get(), View::Exercises);
     let is_history = move || {
-        matches!(view.get(), View::History | View::SessionDetail { .. } | View::Progress { .. })
+        matches!(
+            view.get(),
+            View::History | View::SessionDetail { .. } | View::Progress { .. } | View::Options
+        )
     };
     let is_plan = move || matches!(view.get(), View::PlanEditor | View::DayEditor { .. } | View::ImportExport);
 

@@ -1,6 +1,7 @@
 pub mod csv_utils;
 pub mod models;
 pub mod seed;
+pub mod sync;
 
 #[cfg(test)]
 mod tests {
@@ -98,5 +99,107 @@ mod tests {
             imported.days[0].exercises[0].category,
             ExerciseCategory::Main
         );
+    }
+
+    // ── Sync module tests ─────────────────────────────────────────────────────
+
+    use crate::sync::{SyncConfig, SyncedState};
+    use base64::Engine;
+
+    // Test: default SyncConfig is not configured (empty token + repo)
+    #[wasm_bindgen_test]
+    fn sync_config_unconfigured_when_empty() {
+        let cfg = SyncConfig::default();
+        assert!(!cfg.is_configured());
+    }
+
+    // Test: token present but no repo → not configured
+    #[wasm_bindgen_test]
+    fn sync_config_unconfigured_without_repo() {
+        let cfg = SyncConfig { token: "tok".into(), ..SyncConfig::default() };
+        assert!(!cfg.is_configured());
+    }
+
+    // Test: repo present but no token → not configured
+    #[wasm_bindgen_test]
+    fn sync_config_unconfigured_without_token() {
+        let cfg = SyncConfig { repo: "owner/repo".into(), ..SyncConfig::default() };
+        assert!(!cfg.is_configured());
+    }
+
+    // Test: to_github_config fills "main" / "state.json" when branch/path are empty
+    #[wasm_bindgen_test]
+    fn sync_config_fills_default_branch_and_path() {
+        let cfg = SyncConfig {
+            token: "tok".into(),
+            repo: "owner/repo".into(),
+            branch: String::new(),
+            path: String::new(),
+        };
+        let gh = cfg.to_github_config();
+        assert_eq!(gh.branch, "main");
+        assert_eq!(gh.path, "state.json");
+        assert_eq!(gh.repo, "owner/repo");
+        assert_eq!(gh.token, "tok");
+    }
+
+    // Test: explicit branch/path are preserved
+    #[wasm_bindgen_test]
+    fn sync_config_preserves_explicit_branch_and_path() {
+        let cfg = SyncConfig {
+            token: "tok".into(),
+            repo: "owner/repo".into(),
+            branch: "dev".into(),
+            path: "data/state.json".into(),
+        };
+        let gh = cfg.to_github_config();
+        assert_eq!(gh.branch, "dev");
+        assert_eq!(gh.path, "data/state.json");
+    }
+
+    // Test: SyncedState serializes and deserializes cleanly
+    #[wasm_bindgen_test]
+    fn synced_state_round_trip() {
+        let state = SyncedState {
+            schema_version: 1,
+            updated_at: Some("2026-05-22T00:00:00.000Z".into()),
+            plan: None,
+            exercise_history: vec![],
+            session_drafts: vec![],
+            custom_exercises: vec![],
+        };
+        let json = serde_json::to_string(&state).unwrap();
+        let parsed: SyncedState = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.schema_version, 1);
+        assert_eq!(parsed.updated_at.as_deref(), Some("2026-05-22T00:00:00.000Z"));
+        assert!(parsed.exercise_history.is_empty());
+        assert!(parsed.plan.is_none());
+    }
+
+    // Test: partial JSON (missing array fields) deserializes via #[serde(default)]
+    #[wasm_bindgen_test]
+    fn synced_state_missing_arrays_default_to_empty() {
+        let json = r#"{"schema_version":1,"updated_at":null}"#;
+        let parsed: SyncedState = serde_json::from_str(json).unwrap();
+        assert!(parsed.exercise_history.is_empty());
+        assert!(parsed.session_drafts.is_empty());
+        assert!(parsed.custom_exercises.is_empty());
+        assert!(parsed.plan.is_none());
+    }
+
+    // Test: GitHub wraps base64 at 60 chars with newlines — our stripping logic handles it
+    #[wasm_bindgen_test]
+    fn github_base64_whitespace_strip_round_trips() {
+        let original = r#"{"schema_version":1,"updated_at":null,"plan":null,"exercise_history":[],"session_drafts":[],"custom_exercises":[]}"#;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(original.as_bytes());
+        // Simulate GitHub's 60-char line wrapping
+        let wrapped: String = encoded
+            .chars()
+            .enumerate()
+            .flat_map(|(i, c)| if i > 0 && i % 60 == 0 { vec!['\n', c] } else { vec![c] })
+            .collect();
+        let cleaned: String = wrapped.chars().filter(|c| !c.is_whitespace()).collect();
+        let decoded = base64::engine::general_purpose::STANDARD.decode(&cleaned).unwrap();
+        assert_eq!(String::from_utf8(decoded).unwrap(), original);
     }
 }

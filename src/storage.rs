@@ -1,6 +1,8 @@
 use crate::models::{Exercise, ExerciseEntry, WorkoutPlan, WorkoutSession};
 
 const PLAN_KEY: &str = "ws_plan";
+const SYNC_CONFIG_KEY: &str = "ws_gh_sync";
+const LAST_PUSH_KEY: &str = "ws_last_push_at";
 const EXERCISE_HISTORY_KEY: &str = "ws_ex_history";
 const SESSION_KEY: &str = "ws_active_session";
 const DRAFTS_KEY: &str = "ws_session_drafts";
@@ -65,6 +67,30 @@ pub fn load_custom_exercises() -> Vec<Exercise> {
 pub fn save_custom_exercises(exercises: &[Exercise]) {
     if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(exercises)) {
         let _ = storage.set_item(CUSTOM_EXERCISES_KEY, &json);
+    }
+}
+
+pub fn load_sync_config() -> crate::sync::SyncConfig {
+    local_storage()
+        .and_then(|s| s.get_item(SYNC_CONFIG_KEY).ok().flatten())
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_sync_config(cfg: &crate::sync::SyncConfig) {
+    if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(cfg)) {
+        let _ = storage.set_item(SYNC_CONFIG_KEY, &json);
+    }
+}
+
+pub fn load_last_push_at() -> Option<String> {
+    local_storage()
+        .and_then(|s| s.get_item(LAST_PUSH_KEY).ok().flatten())
+}
+
+pub fn save_last_push_at(ts: &str) {
+    if let Some(storage) = local_storage() {
+        let _ = storage.set_item(LAST_PUSH_KEY, ts);
     }
 }
 
