@@ -37,20 +37,23 @@ pub fn import_plan_csv(csv: &str) -> Result<WorkoutPlan, String> {
         if line.trim().is_empty() {
             continue;
         }
-        let cols: Vec<&str> = split_csv_line(line);
+        let cols: Vec<String> = split_csv_line(line)
+            .into_iter()
+            .map(unquote_field)
+            .collect();
         if cols.len() < 8 {
             return Err(format!("Row {}: expected at least 8 columns, got {}", i + 2, cols.len()));
         }
 
-        let day_id = cols[0].trim().to_string();
-        let day_name = cols[1].trim().to_string();
-        let ex_id = cols[2].trim().to_string();
-        let ex_name = cols[3].trim().to_string();
-        let target_sets: u32 = cols[4].trim().parse().map_err(|_| format!("Row {}: bad target_sets", i + 2))?;
-        let reps_min: u32 = cols[5].trim().parse().map_err(|_| format!("Row {}: bad reps_min", i + 2))?;
-        let reps_max: u32 = cols[6].trim().parse().map_err(|_| format!("Row {}: bad reps_max", i + 2))?;
-        let category = parse_category(cols[7].trim());
-        let notes = cols.get(8).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let day_id = cols[0].clone();
+        let day_name = cols[1].clone();
+        let ex_id = cols[2].clone();
+        let ex_name = cols[3].clone();
+        let target_sets: u32 = cols[4].parse().map_err(|_| format!("Row {}: bad target_sets", i + 2))?;
+        let reps_min: u32 = cols[5].parse().map_err(|_| format!("Row {}: bad reps_min", i + 2))?;
+        let reps_max: u32 = cols[6].parse().map_err(|_| format!("Row {}: bad reps_max", i + 2))?;
+        let category = parse_category(&cols[7]);
+        let notes = cols.get(8).cloned().filter(|s| !s.is_empty());
 
         let exercise = Exercise {
             id: if ex_id.is_empty() {
@@ -116,6 +119,19 @@ pub fn export_history_csv(history: &[ExerciseEntry]) -> String {
 fn csv_field(s: &str) -> String {
     if s.contains(',') || s.contains('"') || s.contains('\n') {
         format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+/// Strips whitespace, removes surrounding `"` if present, and collapses the
+/// CSV-standard `""` escape sequence into a literal `"`. Round-trips with
+/// `csv_field` above.
+fn unquote_field(s: &str) -> String {
+    let s = s.trim();
+    let bytes = s.as_bytes();
+    if bytes.len() >= 2 && bytes[0] == b'"' && bytes[bytes.len() - 1] == b'"' {
+        s[1..s.len() - 1].replace("\"\"", "\"")
     } else {
         s.to_string()
     }
