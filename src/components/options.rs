@@ -28,6 +28,7 @@ pub fn OptionsView() -> impl IntoView {
         saved.path
     });
 
+    let show_help = RwSignal::new(false);
     let test_status: RwSignal<Option<String>> = RwSignal::new(None);
     let is_testing = RwSignal::new(false);
     let is_pulling = RwSignal::new(false);
@@ -158,7 +159,82 @@ pub fn OptionsView() -> impl IntoView {
             </div>
 
             <div class="card" style="margin-bottom:12px">
-                <div class="fw-600" style="margin-bottom:4px">"Sync (GitHub)"</div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px">
+                    <div class="fw-600">"Sync (GitHub)"</div>
+                    <button
+                        class="btn btn-ghost btn-sm"
+                        style="padding:2px 8px; font-size:15px; color:var(--accent)"
+                        on:click=move |_| show_help.update(|v| *v = !*v)
+                    >
+                        {move || if show_help.get() { "✕" } else { "?" }}
+                    </button>
+                </div>
+
+                {move || show_help.get().then(|| view! {
+                    <div style="background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:12px">
+
+                        // Step 1
+                        <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom:12px">
+                            <div style="background:var(--accent); color:#0f0d1f; border-radius:50%; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; margin-top:1px">"1"</div>
+                            <div>
+                                <div class="fw-600 text-sm" style="margin-bottom:2px">"Create the data repo"</div>
+                                <div class="text-sm text-muted">
+                                    "Make a private GitHub repo — the default name below ("
+                                    <code style="background:var(--surface); padding:1px 5px; border-radius:4px; font-size:11px">"wholesome-swolesome-data"</code>
+                                    ") is already filled in for you."
+                                </div>
+                            </div>
+                        </div>
+
+                        // Step 2
+                        <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom:12px">
+                            <div style="background:var(--accent); color:#0f0d1f; border-radius:50%; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; margin-top:1px">"2"</div>
+                            <div>
+                                <div class="fw-600 text-sm" style="margin-bottom:2px">"Generate a fine-grained token"</div>
+                                <div class="text-sm text-muted" style="margin-bottom:6px">
+                                    "Go to GitHub → Settings → Developer settings → Fine-grained tokens → Generate new token."
+                                </div>
+                                <div class="text-sm text-muted" style="margin-bottom:4px">"Set:"</div>
+                                <ul style="list-style:none; display:flex; flex-direction:column; gap:4px; padding-left:4px">
+                                    <li class="text-sm text-muted">"• Repository access → Only select repositories → your data repo"</li>
+                                    <li class="text-sm text-muted">"• Permissions → Contents → " <span class="fw-600" style="color:var(--text)">"Read and write"</span></li>
+                                    <li class="text-sm text-muted">"• Expiration → 1 year (or no expiry)"</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        // Step 3
+                        <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom:14px">
+                            <div style="background:var(--accent); color:#0f0d1f; border-radius:50%; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; margin-top:1px">"3"</div>
+                            <div>
+                                <div class="fw-600 text-sm" style="margin-bottom:2px">"Paste and connect"</div>
+                                <div class="text-sm text-muted">
+                                    "Copy the generated token, paste it in the field below, then tap "
+                                    <span class="fw-600" style="color:var(--text)">"Test connection"</span>
+                                    ". Hit "
+                                    <span class="fw-600" style="color:var(--text)">"Push to GitHub"</span>
+                                    " to back up your data."
+                                </div>
+                            </div>
+                        </div>
+
+                        // Restore tip
+                        <div style="border-top:1px solid var(--border); padding-top:10px">
+                            <div class="text-sm" style="color:var(--pink); font-weight:600; margin-bottom:2px">"🔑 After clearing browser data"</div>
+                            <div class="text-sm text-muted">"Open Options, paste your token again, tap " <span class="fw-600" style="color:var(--text)">"Pull from GitHub"</span>". Your data comes right back."</div>
+                        </div>
+
+                        <a
+                            href="https://github.com/settings/tokens?type=beta"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style="display:block; margin-top:12px; text-align:center; padding:9px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); color:var(--accent); font-size:13px; font-weight:600; text-decoration:none"
+                        >
+                            "Open GitHub token settings ↗"
+                        </a>
+                    </div>
+                })}
+
                 <div class="text-muted text-sm" style="margin-bottom:12px">
                     "Backs up plan, history, drafts, and custom exercises to a private repo. \
                      Clearing local data won't lose anything — paste your PAT again and pull."
