@@ -262,6 +262,7 @@ mod tests {
     // Test: boot-pull guard — empty remote exercise_history is treated as intentional
     // (covers the case where a user deleted all entries and the pull sees an empty array)
     #[wasm_bindgen_test]
+    #[allow(clippy::eq_op, clippy::nonminimal_bool)]
     fn newer_timestamp_wins_regardless_of_content() {
         let older_ts = "2026-05-22T09:00:00.000Z";
         let newer_ts = "2026-05-22T10:00:00.000Z";
@@ -272,6 +273,140 @@ mod tests {
 
         // Same timestamp → should NOT hydrate (no change)
         assert!(!(older_ts > older_ts));
+    }
+
+    // ── CSV quoting / edge cases ──────────────────────────────────────────────
+
+    // Test: exercise names containing commas survive an export → import round-trip
+    #[wasm_bindgen_test]
+    fn csv_round_trip_preserves_comma_in_name() {
+        let plan = WorkoutPlan {
+            days: vec![WorkoutDay {
+                id: "d1".into(),
+                name: "Day, with comma".into(),
+                exercises: vec![Exercise {
+                    id: "e1".into(),
+                    name: "Squat, low-bar".into(),
+                    target_sets: 3,
+                    reps_min: 5,
+                    reps_max: 8,
+                    category: ExerciseCategory::Main,
+                    notes: Some("Heavy, focused".into()),
+                }],
+            }],
+        };
+        let csv = export_plan_csv(&plan);
+        // The field must be quoted in the CSV text
+        assert!(csv.contains("\"Squat, low-bar\""), "comma field should be quoted: {csv}");
+        assert!(csv.contains("\"Day, with comma\""));
+        assert!(csv.contains("\"Heavy, focused\""));
+        let imported = import_plan_csv(&csv).expect("import should succeed");
+        assert_eq!(imported.days[0].name, "Day, with comma");
+        assert_eq!(imported.days[0].exercises[0].name, "Squat, low-bar");
+        assert_eq!(
+            imported.days[0].exercises[0].notes.as_deref(),
+            Some("Heavy, focused"),
+        );
+    }
+
+    // Test: a literal double-quote in a name is escaped as "" per CSV convention
+    #[wasm_bindgen_test]
+    fn csv_round_trip_preserves_quote_in_name() {
+        let plan = WorkoutPlan {
+            days: vec![WorkoutDay {
+                id: "d1".into(),
+                name: "Push".into(),
+                exercises: vec![Exercise {
+                    id: "e1".into(),
+                    name: "Bench (\"competition\" grip)".into(),
+                    target_sets: 3,
+                    reps_min: 5,
+                    reps_max: 8,
+                    category: ExerciseCategory::Main,
+                    notes: None,
+                }],
+            }],
+        };
+        let csv = export_plan_csv(&plan);
+        // Inner quotes are doubled
+        assert!(csv.contains("\"Bench (\"\"competition\"\" grip)\""), "csv: {csv}");
+        let imported = import_plan_csv(&csv).expect("import should succeed");
+        assert_eq!(
+            imported.days[0].exercises[0].name,
+            "Bench (\"competition\" grip)",
+        );
+    }
+
+    // Test: import with empty exercise_id auto-generates a UUID rather than failing
+    #[wasm_bindgen_test]
+    fn csv_import_generates_uuid_when_exercise_id_empty() {
+        let csv = "day_id,day_name,exercise_id,exercise_name,target_sets,reps_min,reps_max,category,notes\n\
+                   d1,Push,,Bench Press,3,8,12,Main,\n";
+        let plan = import_plan_csv(csv).expect("import should succeed");
+        let id = &plan.days[0].exercises[0].id;
+        assert!(!id.is_empty(), "id should be filled with a UUID");
+        // UUIDs are 36 chars with hyphens — sanity check rather than full parse
+        assert_eq!(id.len(), 36);
+        assert_eq!(id.matches('-').count(), 4);
+    }
+
+    // Test: import returns the "no exercises" error for a header-only CSV
+    #[wasm_bindgen_test]
+    fn csv_import_empty_returns_error() {
+        let csv = "day_id,day_name,exercise_id,exercise_name,target_sets,reps_min,reps_max,category,notes\n";
+        let err = import_plan_csv(csv).expect_err("header-only CSV should fail");
+        assert!(err.to_lowercase().contains("no exercises"), "got: {err}");
+    }
+
+    // Test: category strings are case-insensitive and unknown values fall back to Main
+    #[wasm_bindgen_test]
+    fn csv_import_category_parsing() {
+        let csv = "day_id,day_name,exercise_id,exercise_name,target_sets,reps_min,reps_max,category,notes\n\
+                   d1,D,e1,A,3,8,12,Core,\n\
+                   d1,D,e2,B,3,8,12,cardio,\n\
+                   d1,D,e3,C,3,8,12,MAIN,\n\
+                   d1,D,e4,D,3,8,12,wat,\n";
+        let plan = import_plan_csv(csv).expect("import should succeed");
+        let cats: Vec<_> = plan.days[0].exercises.iter().map(|e| &e.category).collect();
+        assert_eq!(cats[0], &ExerciseCategory::Core);
+        assert_eq!(cats[1], &ExerciseCategory::Cardio);
+        assert_eq!(cats[2], &ExerciseCategory::Main);
+        assert_eq!(cats[3], &ExerciseCategory::Main); // unknown → default
+    }
+
+    // ── Model serde backward-compatibility ────────────────────────────────────
+
+    // Test: legacy SetLog persisted with `weight_lbs` is loaded into the `weight` field
+    #[wasm_bindgen_test]
+    fn setlog_legacy_weight_lbs_alias_deserializes() {
+        // Legacy field name (pre-rename) — must still load
+        let legacy = r#"{"set_number":1,"reps":8,"weight_lbs":135.5,"completed":true}"#;
+        let set: crate::models::SetLog =
+            serde_json::from_str(legacy).expect("legacy weight_lbs should deserialize");
+        assert_eq!(set.weight, 135.5);
+        assert_eq!(set.reps, 8);
+        assert!(set.completed);
+        assert!(set.completed_date.is_none());
+    }
+
+    // Test: ExerciseEntry without `completed_date` / `finalized` / `created_at` loads
+    // via serde defaults — guards data already shipped to existing users
+    #[wasm_bindgen_test]
+    fn exercise_entry_legacy_missing_optional_fields_deserializes() {
+        use crate::models::ExerciseEntry;
+        let legacy = r#"{
+            "id":"x","date":"2026-01-01","exercise_name":"Row","exercise_id":"e1",
+            "session_id":null,"day_id":null,"day_name":null,
+            "target_sets":3,"reps_min":8,"reps_max":12,
+            "sets":[{"set_number":1,"reps":10,"weight":100.0,"completed":true}]
+        }"#;
+        let entry: ExerciseEntry = serde_json::from_str(legacy)
+            .expect("legacy entry without finalized/created_at should deserialize");
+        assert_eq!(entry.exercise_name, "Row");
+        assert!(!entry.finalized, "finalized defaults to false");
+        assert!(entry.created_at.is_empty(), "created_at defaults to empty string");
+        // Inner SetLog also fills completed_date via default
+        assert!(entry.sets[0].completed_date.is_none());
     }
 
     // Test: GitHub wraps base64 at 60 chars with newlines — our stripping logic handles it

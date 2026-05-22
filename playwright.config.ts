@@ -15,7 +15,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: '/Users/mt/.cargo/bin/trunk serve --no-autoreload',
+    command: `${process.env.TRUNK ?? 'trunk'} serve --no-autoreload`,
     url: 'http://localhost:8080',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
