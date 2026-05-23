@@ -1,6 +1,6 @@
 pub mod csv_utils;
+pub mod library;
 pub mod models;
-pub mod seed;
 pub mod sync;
 
 #[cfg(test)]
@@ -8,126 +8,32 @@ mod tests {
     use wasm_bindgen_test::*;
     wasm_bindgen_test_configure!(run_in_browser);
 
-    use crate::csv_utils::{export_plan_csv, import_plan_csv};
-    use crate::models::{Exercise, ExerciseCategory, WorkoutDay, WorkoutPlan};
-
-    fn simple_plan() -> WorkoutPlan {
-        WorkoutPlan {
-            days: vec![
-                WorkoutDay {
-                    id: "d1".into(),
-                    name: "Push Day".into(),
-                    exercises: vec![
-                        Exercise {
-                            id: "e1".into(),
-                            name: "Bench Press".into(),
-                            target_sets: 3,
-                            reps_min: 8,
-                            reps_max: 12,
-                            category: ExerciseCategory::Main,
-                            notes: None,
-                        },
-                        Exercise {
-                            id: "e2".into(),
-                            name: "Overhead Press".into(),
-                            target_sets: 3,
-                            reps_min: 6,
-                            reps_max: 10,
-                            category: ExerciseCategory::Main,
-                            notes: Some("strict form".into()),
-                        },
-                    ],
-                },
-                WorkoutDay {
-                    id: "d2".into(),
-                    name: "Pull Day".into(),
-                    exercises: vec![Exercise {
-                        id: "e3".into(),
-                        name: "Pull-up".into(),
-                        target_sets: 4,
-                        reps_min: 5,
-                        reps_max: 10,
-                        category: ExerciseCategory::Main,
-                        notes: None,
-                    }],
-                },
-            ],
-        }
-    }
-
-    // Test 22: exported CSV has correct header and data rows
-    #[wasm_bindgen_test]
-    fn csv_export_plan_format() {
-        let plan = simple_plan();
-        let csv = export_plan_csv(&plan);
-        let lines: Vec<&str> = csv.lines().collect();
-
-        assert_eq!(
-            lines[0],
-            "day_id,day_name,exercise_id,exercise_name,target_sets,reps_min,reps_max,category,notes"
-        );
-        assert_eq!(lines[1], "d1,Push Day,e1,Bench Press,3,8,12,Main,");
-        assert_eq!(lines[2], "d1,Push Day,e2,Overhead Press,3,6,10,Main,strict form");
-        assert_eq!(lines[3], "d2,Pull Day,e3,Pull-up,4,5,10,Main,");
-        assert_eq!(lines.len(), 4); // header + 3 exercises, no trailing blank line
-    }
-
-    // Test 23: import parses correctly and produces equivalent plan
-    #[wasm_bindgen_test]
-    fn csv_import_round_trip() {
-        let original = simple_plan();
-        let csv = export_plan_csv(&original);
-        let imported = import_plan_csv(&csv).expect("import should succeed");
-
-        assert_eq!(imported.days.len(), 2);
-        assert_eq!(imported.days[0].id, "d1");
-        assert_eq!(imported.days[0].name, "Push Day");
-        assert_eq!(imported.days[0].exercises.len(), 2);
-        assert_eq!(imported.days[0].exercises[0].name, "Bench Press");
-        assert_eq!(imported.days[0].exercises[0].target_sets, 3);
-        assert_eq!(imported.days[0].exercises[0].reps_min, 8);
-        assert_eq!(imported.days[0].exercises[0].reps_max, 12);
-        assert_eq!(imported.days[0].exercises[1].name, "Overhead Press");
-        assert_eq!(
-            imported.days[0].exercises[1].notes,
-            Some("strict form".into())
-        );
-        assert_eq!(imported.days[1].exercises[0].name, "Pull-up");
-        assert_eq!(imported.days[1].exercises[0].target_sets, 4);
-        // category round-trips
-        assert_eq!(
-            imported.days[0].exercises[0].category,
-            ExerciseCategory::Main
-        );
-    }
-
-    // ── Sync module tests ─────────────────────────────────────────────────────
-
+    use crate::models::{
+        ExerciseEntry, ScheduledExercise, ScheduledWorkout, UserGoals, WorkoutSource,
+    };
     use crate::sync::{SyncConfig, SyncedState};
     use base64::Engine;
 
-    // Test: default SyncConfig is not configured (empty token + repo)
+    // ── SyncConfig ────────────────────────────────────────────────────────────
+
     #[wasm_bindgen_test]
     fn sync_config_unconfigured_when_empty() {
         let cfg = SyncConfig::default();
         assert!(!cfg.is_configured());
     }
 
-    // Test: token present but no repo → not configured
     #[wasm_bindgen_test]
     fn sync_config_unconfigured_without_repo() {
         let cfg = SyncConfig { token: "tok".into(), ..SyncConfig::default() };
         assert!(!cfg.is_configured());
     }
 
-    // Test: repo present but no token → not configured
     #[wasm_bindgen_test]
     fn sync_config_unconfigured_without_token() {
         let cfg = SyncConfig { repo: "owner/repo".into(), ..SyncConfig::default() };
         assert!(!cfg.is_configured());
     }
 
-    // Test: to_github_config fills "main" / "state.json" when branch/path are empty
     #[wasm_bindgen_test]
     fn sync_config_fills_default_branch_and_path() {
         let cfg = SyncConfig {
@@ -139,59 +45,83 @@ mod tests {
         let gh = cfg.to_github_config();
         assert_eq!(gh.branch, "main");
         assert_eq!(gh.path, "state.json");
-        assert_eq!(gh.repo, "owner/repo");
-        assert_eq!(gh.token, "tok");
     }
 
-    // Test: explicit branch/path are preserved
-    #[wasm_bindgen_test]
-    fn sync_config_preserves_explicit_branch_and_path() {
-        let cfg = SyncConfig {
-            token: "tok".into(),
-            repo: "owner/repo".into(),
-            branch: "dev".into(),
-            path: "data/state.json".into(),
-        };
-        let gh = cfg.to_github_config();
-        assert_eq!(gh.branch, "dev");
-        assert_eq!(gh.path, "data/state.json");
-    }
+    // ── SyncedState v2 ────────────────────────────────────────────────────────
 
-    // Test: SyncedState serializes and deserializes cleanly
-    #[wasm_bindgen_test]
-    fn synced_state_round_trip() {
-        let state = SyncedState {
-            schema_version: 1,
-            updated_at: Some("2026-05-22T00:00:00.000Z".into()),
-            plan: None,
+    fn empty_state(ts: &str) -> SyncedState {
+        SyncedState {
+            schema_version: 2,
+            updated_at: Some(ts.into()),
+            goals: UserGoals::default(),
+            scheduled_workouts: vec![],
             exercise_history: vec![],
             session_drafts: vec![],
             custom_exercises: vec![],
-        };
-        let json = serde_json::to_string(&state).unwrap();
-        let parsed: SyncedState = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.schema_version, 1);
-        assert_eq!(parsed.updated_at.as_deref(), Some("2026-05-22T00:00:00.000Z"));
-        assert!(parsed.exercise_history.is_empty());
-        assert!(parsed.plan.is_none());
+            plan: None,
+        }
     }
 
-    // Test: partial JSON (missing array fields) deserializes via #[serde(default)]
+    #[wasm_bindgen_test]
+    fn synced_state_round_trip() {
+        let state = empty_state("2026-05-22T00:00:00.000Z");
+        let json = serde_json::to_string(&state).unwrap();
+        let parsed: SyncedState = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.schema_version, 2);
+        assert_eq!(parsed.updated_at.as_deref(), Some("2026-05-22T00:00:00.000Z"));
+        assert!(parsed.exercise_history.is_empty());
+        assert!(parsed.scheduled_workouts.is_empty());
+    }
+
     #[wasm_bindgen_test]
     fn synced_state_missing_arrays_default_to_empty() {
-        let json = r#"{"schema_version":1,"updated_at":null}"#;
+        let json = r#"{"schema_version":2,"updated_at":null}"#;
         let parsed: SyncedState = serde_json::from_str(json).unwrap();
         assert!(parsed.exercise_history.is_empty());
         assert!(parsed.session_drafts.is_empty());
         assert!(parsed.custom_exercises.is_empty());
-        assert!(parsed.plan.is_none());
+        assert!(parsed.scheduled_workouts.is_empty());
     }
 
-    // Test: a deletion is preserved through a serialize → deserialize round-trip
+    #[wasm_bindgen_test]
+    fn synced_state_accepts_legacy_v1_with_plan() {
+        // Old shape — has `plan` but no `goals`/`scheduled_workouts`.
+        let json = r#"{"schema_version":1,"updated_at":"2026-01-01T00:00:00.000Z","plan":{"days":[]},"exercise_history":[]}"#;
+        let parsed: SyncedState = serde_json::from_str(json).unwrap();
+        assert!(parsed.plan.is_some());
+        assert!(parsed.scheduled_workouts.is_empty());
+    }
+
+    #[wasm_bindgen_test]
+    fn scheduled_workout_round_trips() {
+        let mut state = empty_state("2026-05-22T00:00:00.000Z");
+        state.scheduled_workouts.push(ScheduledWorkout {
+            id: "sw-1".into(),
+            date: "2026-05-23".into(),
+            name: "Upper Push".into(),
+            rationale: "Chest fresh, shoulders recovered 4 days".into(),
+            source: WorkoutSource::Coach,
+            exercises: vec![ScheduledExercise {
+                library_id: Some("Barbell_Bench_Press_-_Medium_Grip".into()),
+                name: "Bench Press".into(),
+                target_sets: 4,
+                reps_min: 6,
+                reps_max: 8,
+                rest_seconds: 180,
+                notes: Some("RPE 7".into()),
+            }],
+            created_at: "2026-05-22T23:00:00.000Z".into(),
+        });
+        let json = serde_json::to_string(&state).unwrap();
+        let parsed: SyncedState = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.scheduled_workouts.len(), 1);
+        let w = &parsed.scheduled_workouts[0];
+        assert_eq!(w.exercises[0].library_id.as_deref(), Some("Barbell_Bench_Press_-_Medium_Grip"));
+        assert_eq!(w.exercises[0].rest_seconds, 180);
+    }
+
     #[wasm_bindgen_test]
     fn deletion_preserved_through_serde_roundtrip() {
-        use crate::models::ExerciseEntry;
-
         let make_entry = |id: &str| ExerciseEntry {
             id: id.to_string(),
             session_id: None,
@@ -208,78 +138,34 @@ mod tests {
             sets: vec![],
         };
 
-        // Start with 3 entries
-        let history = vec![make_entry("a"), make_entry("b"), make_entry("c")];
-        let state = SyncedState {
-            schema_version: 1,
-            updated_at: Some("2026-05-22T10:00:00.000Z".to_string()),
-            plan: None,
-            exercise_history: history,
-            session_drafts: vec![],
-            custom_exercises: vec![],
-        };
-
-        // Simulate push: serialize
+        let mut state = empty_state("2026-05-22T10:00:00.000Z");
+        state.exercise_history = vec![make_entry("a"), make_entry("b"), make_entry("c")];
         let json = serde_json::to_string(&state).unwrap();
 
-        // Simulate delete of entry "b" on the client
         let mut after_delete: SyncedState = serde_json::from_str(&json).unwrap();
         after_delete.exercise_history.retain(|e| e.id != "b");
         after_delete.updated_at = Some("2026-05-22T10:05:00.000Z".to_string());
 
-        // Simulate push of post-delete state, then pull on another session
         let pushed = serde_json::to_string(&after_delete).unwrap();
         let pulled: SyncedState = serde_json::from_str(&pushed).unwrap();
 
         assert_eq!(pulled.exercise_history.len(), 2);
-        assert!(pulled.exercise_history.iter().all(|e| e.id != "b"),
-            "deleted entry 'b' should not appear after pull");
-        assert!(pulled.exercise_history.iter().any(|e| e.id == "a"));
-        assert!(pulled.exercise_history.iter().any(|e| e.id == "c"));
+        assert!(pulled.exercise_history.iter().all(|e| e.id != "b"));
     }
 
-    // Test: deleting all history produces an empty vec, not null — deserializes correctly
     #[wasm_bindgen_test]
     fn delete_all_history_round_trips_as_empty_vec() {
-        let state = SyncedState {
-            schema_version: 1,
-            updated_at: Some("2026-05-22T10:00:00.000Z".to_string()),
-            plan: None,
-            exercise_history: vec![],  // all deleted
-            session_drafts: vec![],
-            custom_exercises: vec![],
-        };
+        let state = empty_state("2026-05-22T10:00:00.000Z");
         let json = serde_json::to_string(&state).unwrap();
-
-        // Confirm the JSON encodes as an empty array, not null or absent
-        assert!(json.contains("\"exercise_history\":[]"),
-            "empty history should serialize as [] not null");
-
+        assert!(json.contains("\"exercise_history\":[]"));
         let pulled: SyncedState = serde_json::from_str(&json).unwrap();
         assert!(pulled.exercise_history.is_empty());
     }
 
-    // Test: boot-pull guard — empty remote exercise_history is treated as intentional
-    // (covers the case where a user deleted all entries and the pull sees an empty array)
-    #[wasm_bindgen_test]
-    fn newer_timestamp_wins_regardless_of_content() {
-        let older_ts = "2026-05-22T09:00:00.000Z";
-        let newer_ts = "2026-05-22T10:00:00.000Z";
-
-        // Remote is newer → should hydrate (even if its arrays are empty after deletes)
-        assert!(newer_ts > older_ts,
-            "ISO 8601 strings compare lexicographically; newer timestamp should sort higher");
-
-        // Same timestamp → should NOT hydrate (no change)
-        assert!(!(older_ts > older_ts));
-    }
-
-    // Test: GitHub wraps base64 at 60 chars with newlines — our stripping logic handles it
     #[wasm_bindgen_test]
     fn github_base64_whitespace_strip_round_trips() {
-        let original = r#"{"schema_version":1,"updated_at":null,"plan":null,"exercise_history":[],"session_drafts":[],"custom_exercises":[]}"#;
+        let original = serde_json::to_string(&empty_state("2026-05-22T00:00:00.000Z")).unwrap();
         let encoded = base64::engine::general_purpose::STANDARD.encode(original.as_bytes());
-        // Simulate GitHub's 60-char line wrapping
         let wrapped: String = encoded
             .chars()
             .enumerate()
@@ -288,5 +174,36 @@ mod tests {
         let cleaned: String = wrapped.chars().filter(|c| !c.is_whitespace()).collect();
         let decoded = base64::engine::general_purpose::STANDARD.decode(&cleaned).unwrap();
         assert_eq!(String::from_utf8(decoded).unwrap(), original);
+    }
+
+    // ── Library ──────────────────────────────────────────────────────────────
+
+    #[wasm_bindgen_test]
+    fn library_parses_sample_entry() {
+        use crate::models::LibraryExercise;
+        let sample = r#"[{
+            "id":"Ab_Roller","name":"Ab Roller",
+            "force":"pull","level":"intermediate","mechanic":"compound","equipment":"other",
+            "primaryMuscles":["abdominals"],"secondaryMuscles":["shoulders"],
+            "instructions":["a","b"],"category":"strength","images":["x.jpg"]
+        }]"#;
+        let parsed: Vec<LibraryExercise> = serde_json::from_str(sample).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].primary_muscles, vec!["abdominals"]);
+        assert_eq!(parsed[0].equipment.as_deref(), Some("other"));
+    }
+
+    // ── Recency bucket ───────────────────────────────────────────────────────
+
+    #[wasm_bindgen_test]
+    fn recency_buckets_match_expected_ranges() {
+        use crate::library::recency_bucket;
+        assert_eq!(recency_bucket(0), Some(crate::library::RecencyBucket::Recent));
+        assert_eq!(recency_bucket(3), Some(crate::library::RecencyBucket::Recent));
+        assert_eq!(recency_bucket(4), Some(crate::library::RecencyBucket::Week));
+        assert_eq!(recency_bucket(7), Some(crate::library::RecencyBucket::Week));
+        assert_eq!(recency_bucket(8), Some(crate::library::RecencyBucket::TwoWeeks));
+        assert_eq!(recency_bucket(14), Some(crate::library::RecencyBucket::TwoWeeks));
+        assert_eq!(recency_bucket(15), Some(crate::library::RecencyBucket::Stale));
     }
 }

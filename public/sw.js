@@ -1,4 +1,4 @@
-const CACHE = "swolesome-v6";
+const CACHE = "swolesome-v9";
 
 const PRECACHE = [
   "./",
@@ -21,15 +21,38 @@ self.addEventListener("activate", (e) => {
   self.clients.claim();
 });
 
-// Cache-first for same-origin assets, network-first for navigation
 self.addEventListener("fetch", (e) => {
   const { request } = e;
+  const url = new URL(request.url);
+
+  // Navigation: network-first, cache fallback for offline.
   if (request.mode === "navigate") {
     e.respondWith(
       fetch(request).catch(() => caches.match("./index.html"))
     );
     return;
   }
+
+  // /data/* (exercise library + images): network-first, bypass the HTTP cache
+  // so a stale entry from a broken earlier load can't poison us. Cache the
+  // fresh response for offline; fall back to SW cache only when network fails.
+  if (url.pathname.startsWith("/data/")) {
+    e.respondWith(
+      fetch(request, { cache: "reload" })
+        .then((response) => {
+          if (response.ok && response.headers.get("content-type")?.includes("json") ||
+              response.ok && url.pathname.match(/\.(jpg|png|gif|webp)$/i)) {
+            const clone = response.clone();
+            caches.open(CACHE).then((c) => c.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Everything else (wasm, js, css, html): cache-first.
   e.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;

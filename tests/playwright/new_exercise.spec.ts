@@ -3,7 +3,7 @@ import { freshPage } from './helpers';
 
 async function goToExercises(page: Parameters<typeof freshPage>[0]) {
   await page.locator('.nav-btn').filter({ hasText: 'Exercises' }).click();
-  await page.waitForSelector('.ex-card');
+  await page.waitForSelector('.new-exercise-btn');
 }
 
 test.describe('New exercise creation', () => {

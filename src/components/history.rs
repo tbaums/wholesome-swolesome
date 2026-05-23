@@ -2,6 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
 use crate::app::{AppState, View};
+use crate::components::body_heatmap::BodyHeatmap;
 use crate::csv_utils::{download_file, export_history_csv};
 
 // ── History list ──────────────────────────────────────────────────────────────
@@ -63,6 +64,8 @@ pub fn HistoryView() -> impl IntoView {
                     </button>
                 </div>
             </div>
+
+            <BodyHeatmap/>
 
             {move || {
                 let entries = sorted_entries();

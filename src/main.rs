@@ -1,8 +1,9 @@
 mod app;
+mod coach;
 mod components;
 mod csv_utils;
+mod library;
 mod models;
-mod seed;
 mod storage;
 mod sync;
 

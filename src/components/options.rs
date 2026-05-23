@@ -2,7 +2,10 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::app::{AppState, View, build_synced_state};
+use crate::app::{current_date, current_datetime, build_synced_state, AppState, View};
+use crate::coach::{build_coach_packet, parse_workout_response, PacketInput};
+use crate::csv_utils::download_file;
+use crate::models::{PrimaryGoal, EQUIPMENT_OPTIONS};
 use crate::storage;
 use crate::sync::{self, SyncConfig, fetch_state, push_state};
 
@@ -75,9 +78,8 @@ pub fn OptionsView() -> impl IntoView {
                             // Suppress auto-push while we hydrate signals from remote.
                             // Reset after 3s so the debounce window clears first.
                             state.suppress_push.set(true);
-                            if let Some(plan) = remote.state.plan {
-                                state.plan.set(plan);
-                            }
+                            state.goals.set(remote.state.goals);
+                            state.scheduled_workouts.set(remote.state.scheduled_workouts);
                             state.history.set(remote.state.exercise_history);
                             state.session_drafts.set(remote.state.session_drafts);
                             state.custom_exercises.set(remote.state.custom_exercises);
@@ -157,6 +159,8 @@ pub fn OptionsView() -> impl IntoView {
                 </button>
                 <h1 class="page-title">"Options"</h1>
             </div>
+
+            <GoalsEditor/>
 
             <div class="card" style="margin-bottom:12px">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px">
@@ -337,4 +341,238 @@ pub fn OptionsView() -> impl IntoView {
             </div>
         </div>
     }
+}
+
+// ── Goals editor ─────────────────────────────────────────────────────────────
+
+#[component]
+fn GoalsEditor() -> impl IntoView {
+    let state = expect_context::<AppState>();
+
+    let goal_set = move |g: PrimaryGoal| {
+        state.goals.update(|x| x.primary_goal = g);
+    };
+    let set_sessions = move |v: u32| state.goals.update(|x| x.sessions_per_week = v);
+    let set_minutes = move |v: u32| state.goals.update(|x| x.session_minutes = v);
+    let set_avoid = move |s: String| state.goals.update(|x| x.avoid = s);
+    let set_notes = move |s: String| state.goals.update(|x| x.notes = s);
+
+    let toggle_equipment = move |eq: String| {
+        state.goals.update(|x| {
+            if let Some(p) = x.equipment.iter().position(|s| s == &eq) {
+                x.equipment.remove(p);
+            } else {
+                x.equipment.push(eq);
+            }
+        });
+    };
+
+    view! {
+        <div class="card" style="margin-bottom:12px">
+            <div class="fw-600" style="margin-bottom:8px">"Training goals"</div>
+            <div class="text-muted text-sm" style="margin-bottom:10px">
+                "The coach uses these to plan your next workout."
+            </div>
+
+            <label class="text-sm text-muted">"Primary goal"</label>
+            <div style="margin-bottom:14px">
+                {PrimaryGoal::all().iter().copied().map(|g| {
+                    let active = move || state.goals.get().primary_goal == g;
+                    view! {
+                        <span
+                            class="goal-pill"
+                            class:active=active
+                            on:click=move |_| goal_set(g)
+                        >{g.label()}</span>
+                    }
+                }).collect_view()}
+            </div>
+
+            <div style="display:flex; gap:8px; margin-bottom:14px">
+                <div style="flex:1">
+                    <label class="text-sm text-muted">"Sessions / week"</label>
+                    <input
+                        type="number"
+                        min="1" max="7"
+                        class="input"
+                        prop:value=move || state.goals.get().sessions_per_week.to_string()
+                        on:change=move |e| set_sessions(event_target_value(&e).parse().unwrap_or(4))
+                    />
+                </div>
+                <div style="flex:1">
+                    <label class="text-sm text-muted">"Session minutes"</label>
+                    <input
+                        type="number"
+                        min="15" max="240" step="5"
+                        class="input"
+                        prop:value=move || state.goals.get().session_minutes.to_string()
+                        on:change=move |e| set_minutes(event_target_value(&e).parse().unwrap_or(60))
+                    />
+                </div>
+            </div>
+
+            <label class="text-sm text-muted">"Available equipment"</label>
+            <div style="margin-bottom:14px">
+                {EQUIPMENT_OPTIONS.iter().copied().map(|eq| {
+                    let eq_s = eq.to_string();
+                    let eq_for_active = eq_s.clone();
+                    let eq_for_click = eq_s.clone();
+                    let active = move || state.goals.get().equipment.iter().any(|s| s == &eq_for_active);
+                    view! {
+                        <span
+                            class="goal-pill"
+                            class:active=active
+                            on:click=move |_| toggle_equipment(eq_for_click.clone())
+                        >{eq.to_string()}</span>
+                    }
+                }).collect_view()}
+            </div>
+            <div class="text-muted text-sm" style="margin-bottom:14px; margin-top:-8px">
+                "Tip: leave all unselected = assume full commercial gym."
+            </div>
+
+            <label class="text-sm text-muted">"Injuries / lifts to avoid"</label>
+            <textarea
+                class="input"
+                rows="2"
+                style="margin-bottom:10px"
+                placeholder="e.g. left shoulder impingement; no overhead press"
+                prop:value=move || state.goals.get().avoid.clone()
+                on:input=move |e| set_avoid(event_target_value(&e))
+            />
+
+            <label class="text-sm text-muted">"Notes for the coach"</label>
+            <textarea
+                class="input"
+                rows="2"
+                placeholder="e.g. prefer compound lifts; bias glutes; warm-up included separately"
+                prop:value=move || state.goals.get().notes.clone()
+                on:input=move |e| set_notes(event_target_value(&e))
+            />
+        </div>
+    }
+}
+
+// ── Coach packet view ────────────────────────────────────────────────────────
+
+#[component]
+pub fn CoachPacketView() -> impl IntoView {
+    let state = expect_context::<AppState>();
+
+    let target_date = RwSignal::new(tomorrow());
+    let packet = move || {
+        let goals = state.goals.get();
+        let history = state.history.get();
+        let library = state.library.get();
+        let scheduled = state.scheduled_workouts.get();
+        let today = current_date();
+        let target = target_date.get();
+        build_coach_packet(PacketInput {
+            goals: &goals,
+            history: &history,
+            library: &library,
+            scheduled: &scheduled,
+            today: &today,
+            target_date: &target,
+        })
+    };
+
+    let response_text: RwSignal<String> = RwSignal::new(String::new());
+    let import_status: RwSignal<Option<String>> = RwSignal::new(None);
+
+    let copy_packet = move |_| {
+        let text = packet();
+        let window = web_sys::window();
+        if let Some(window) = window {
+            let _ = window.navigator().clipboard().write_text(&text);
+            state.show_toast("Copied to clipboard");
+        }
+    };
+    let download_packet = move |_| {
+        let text = packet();
+        download_file("coach_brief.md", &text);
+    };
+
+    let import_workout = move |_| {
+        let text = response_text.get_untracked();
+        if text.trim().is_empty() {
+            import_status.set(Some("Paste Claude's JSON response first.".into()));
+            return;
+        }
+        let target = target_date.get_untracked();
+        let created = current_datetime();
+        match parse_workout_response(&text, &target, &created) {
+            Ok(workout) => {
+                let label = workout.name.clone();
+                state.scheduled_workouts.update(|v| {
+                    v.retain(|w| w.date != target);
+                    v.push(workout);
+                });
+                import_status.set(Some(format!("✓ Imported '{label}' for {target}")));
+                response_text.set(String::new());
+                state.show_toast("Workout added");
+            }
+            Err(e) => import_status.set(Some(format!("✗ {e}"))),
+        }
+    };
+
+    view! {
+        <div class="page">
+            <div class="page-header">
+                <button class="back-btn" on:click=move |_| state.navigate(View::Home)>"‹ Back"</button>
+                <h1 class="page-title">"Coach Brief"</h1>
+            </div>
+
+            <div class="card" style="margin-bottom:12px">
+                <label class="text-sm text-muted">"Target workout date"</label>
+                <input
+                    type="date"
+                    class="input"
+                    prop:value=move || target_date.get()
+                    on:change=move |e| target_date.set(event_target_value(&e))
+                />
+                <div class="text-muted text-sm" style="margin-top:8px">
+                    "1) Copy this brief → 2) paste into Claude Code (any session) → 3) paste Claude's JSON response below → 4) Import."
+                </div>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-bottom:8px">
+                <button class="btn btn-primary" style="flex:1" on:click=copy_packet>"📋 Copy brief"</button>
+                <button class="btn btn-secondary" style="flex:1" on:click=download_packet>"⬇ Download .md"</button>
+            </div>
+
+            <pre class="coach-packet-pre">{packet}</pre>
+
+            <div class="card" style="margin-top:14px">
+                <div class="fw-600" style="margin-bottom:6px">"Paste Claude's JSON response"</div>
+                <textarea
+                    class="input"
+                    rows="6"
+                    style="font-family: ui-monospace, monospace; font-size: 11px"
+                    placeholder="{ &quot;name&quot;: ..., &quot;exercises&quot;: [...] }"
+                    prop:value=move || response_text.get()
+                    on:input=move |e| response_text.set(event_target_value(&e))
+                />
+                {move || import_status.get().map(|s| view! {
+                    <div class="text-sm" style="margin-top:8px">{s}</div>
+                })}
+                <button
+                    class="btn btn-primary btn-full"
+                    style="margin-top:8px"
+                    on:click=import_workout
+                >"Import workout"</button>
+            </div>
+        </div>
+    }
+}
+
+fn tomorrow() -> String {
+    let d = js_sys::Date::new_0();
+    d.set_date(d.get_date() + 1);
+    format!(
+        "{:04}-{:02}-{:02}",
+        d.get_full_year(),
+        d.get_month() + 1,
+        d.get_date(),
+    )
 }

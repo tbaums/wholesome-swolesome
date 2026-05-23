@@ -61,8 +61,9 @@ pub fn ExercisesView() -> impl IntoView {
 
     // Popularity-sorted initial snapshot. Stored as a signal so newly created
     // exercises can be appended without re-sorting (and collapsing open accordions).
+    // Sources: exercises seen in history, scheduled workouts, custom-added.
     let exercise_names: RwSignal<Vec<String>> = RwSignal::new({
-        let plan = state.plan.get_untracked();
+        let scheduled = state.scheduled_workouts.get_untracked();
         let custom = state.custom_exercises.get_untracked();
         let history = state.history.get_untracked();
 
@@ -74,8 +75,13 @@ pub fn ExercisesView() -> impl IntoView {
 
         let mut seen = std::collections::HashSet::new();
         let mut names = Vec::new();
-        for day in &plan.days {
-            for ex in &day.exercises {
+        for entry in &history {
+            if seen.insert(entry.exercise_name.clone()) {
+                names.push(entry.exercise_name.clone());
+            }
+        }
+        for w in &scheduled {
+            for ex in &w.exercises {
                 if seen.insert(ex.name.clone()) {
                     names.push(ex.name.clone());
                 }
@@ -226,16 +232,27 @@ fn ExerciseFreeformCard(
 ) -> impl IntoView {
     let state = expect_context::<AppState>();
 
-    // Look up metadata from the plan first, then fall back to custom exercises.
-    let plan = state.plan.get_untracked();
+    // Look up metadata: scheduled workouts first (most recent prescription), then customs, then history.
+    let scheduled = state.scheduled_workouts.get_untracked();
     let custom = state.custom_exercises.get_untracked();
-    let (exercise_id, target_sets, reps_min, reps_max) = plan
-        .days
+    let history = state.history.get_untracked();
+    let (exercise_id, target_sets, reps_min, reps_max) = scheduled
         .iter()
-        .flat_map(|d| d.exercises.iter())
-        .chain(custom.iter())
+        .rev()
+        .flat_map(|w| w.exercises.iter())
         .find(|e| e.name == exercise_name)
-        .map(|e| (e.id.clone(), e.target_sets, e.reps_min, e.reps_max))
+        .map(|e| (
+            e.library_id.clone().unwrap_or_else(|| e.name.clone()),
+            e.target_sets,
+            e.reps_min,
+            e.reps_max,
+        ))
+        .or_else(|| custom.iter().find(|e| e.name == exercise_name).map(|e| {
+            (e.id.clone(), e.target_sets, e.reps_min, e.reps_max)
+        }))
+        .or_else(|| history.iter().rev().find(|e| e.exercise_name == exercise_name).map(|e| {
+            (e.exercise_id.clone(), e.target_sets, e.reps_min, e.reps_max)
+        }))
         .unwrap_or_else(|| (String::new(), 3, 8, 12));
 
     let meta = format!("{} sets × {}–{} reps", target_sets, reps_min, reps_max);

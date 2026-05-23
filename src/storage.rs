@@ -1,28 +1,18 @@
-use crate::models::{Exercise, ExerciseEntry, WorkoutPlan, WorkoutSession};
+use crate::models::{
+    Exercise, ExerciseEntry, ScheduledWorkout, UserGoals, WorkoutSession,
+};
 
-const PLAN_KEY: &str = "ws_plan";
 const SYNC_CONFIG_KEY: &str = "ws_gh_sync";
 const LAST_PUSH_KEY: &str = "ws_last_push_at";
 const EXERCISE_HISTORY_KEY: &str = "ws_ex_history";
 const SESSION_KEY: &str = "ws_active_session";
 const DRAFTS_KEY: &str = "ws_session_drafts";
 const CUSTOM_EXERCISES_KEY: &str = "ws_custom_exercises";
+const GOALS_KEY: &str = "ws_goals";
+const SCHEDULED_WORKOUTS_KEY: &str = "ws_scheduled_workouts";
 
 fn local_storage() -> Option<web_sys::Storage> {
     web_sys::window()?.local_storage().ok()?
-}
-
-pub fn load_plan() -> WorkoutPlan {
-    local_storage()
-        .and_then(|s| s.get_item(PLAN_KEY).ok().flatten())
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_default()
-}
-
-pub fn save_plan(plan: &WorkoutPlan) {
-    if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(plan)) {
-        let _ = storage.set_item(PLAN_KEY, &json);
-    }
 }
 
 pub fn load_exercise_history() -> Vec<ExerciseEntry> {
@@ -67,6 +57,32 @@ pub fn load_custom_exercises() -> Vec<Exercise> {
 pub fn save_custom_exercises(exercises: &[Exercise]) {
     if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(exercises)) {
         let _ = storage.set_item(CUSTOM_EXERCISES_KEY, &json);
+    }
+}
+
+pub fn load_goals() -> UserGoals {
+    local_storage()
+        .and_then(|s| s.get_item(GOALS_KEY).ok().flatten())
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_goals(goals: &UserGoals) {
+    if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(goals)) {
+        let _ = storage.set_item(GOALS_KEY, &json);
+    }
+}
+
+pub fn load_scheduled_workouts() -> Vec<ScheduledWorkout> {
+    local_storage()
+        .and_then(|s| s.get_item(SCHEDULED_WORKOUTS_KEY).ok().flatten())
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_scheduled_workouts(workouts: &[ScheduledWorkout]) {
+    if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(workouts)) {
+        let _ = storage.set_item(SCHEDULED_WORKOUTS_KEY, &json);
     }
 }
 
