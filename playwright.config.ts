@@ -4,6 +4,10 @@ export default defineConfig({
   testDir: './tests/playwright',
   timeout: 30_000,
   retries: process.env.CI ? 2 : 0,
+  // Always emit the html report so CI can upload it as a debugging artifact.
+  reporter: process.env.CI
+    ? [['list'], ['html', { open: 'never' }]]
+    : [['list']],
   projects: [
     {
       name: 'iPhone 15',
@@ -15,7 +19,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: '/Users/mt/.cargo/bin/trunk serve --no-autoreload',
+    command: `${process.env.TRUNK ?? 'trunk'} serve --no-autoreload`,
     url: 'http://localhost:8080',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

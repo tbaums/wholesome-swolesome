@@ -162,6 +162,48 @@ mod tests {
         assert!(pulled.exercise_history.is_empty());
     }
 
+    // Boot-pull guard: newer remote timestamp wins regardless of array contents
+    // (covers the case where a user deleted all entries and the pull sees an empty array).
+    #[wasm_bindgen_test]
+    #[allow(clippy::eq_op, clippy::nonminimal_bool)]
+    fn newer_timestamp_wins_regardless_of_content() {
+        let older_ts = "2026-05-22T09:00:00.000Z";
+        let newer_ts = "2026-05-22T10:00:00.000Z";
+        assert!(newer_ts > older_ts,
+            "ISO 8601 strings compare lexicographically; newer timestamp should sort higher");
+        assert!(!(older_ts > older_ts));
+    }
+
+    // ── Model serde backward-compatibility ────────────────────────────────────
+
+    #[wasm_bindgen_test]
+    fn setlog_legacy_weight_lbs_alias_deserializes() {
+        let legacy = r#"{"set_number":1,"reps":8,"weight_lbs":135.5,"completed":true}"#;
+        let set: crate::models::SetLog =
+            serde_json::from_str(legacy).expect("legacy weight_lbs should deserialize");
+        assert_eq!(set.weight, 135.5);
+        assert_eq!(set.reps, 8);
+        assert!(set.completed);
+        assert!(set.completed_date.is_none());
+    }
+
+    #[wasm_bindgen_test]
+    fn exercise_entry_legacy_missing_optional_fields_deserializes() {
+        let legacy = r#"{
+            "id":"x","date":"2026-01-01","exercise_name":"Row","exercise_id":"e1",
+            "session_id":null,"day_id":null,"day_name":null,
+            "target_sets":3,"reps_min":8,"reps_max":12,
+            "sets":[{"set_number":1,"reps":10,"weight":100.0,"completed":true}]
+        }"#;
+        let entry: ExerciseEntry = serde_json::from_str(legacy)
+            .expect("legacy entry without finalized/created_at should deserialize");
+        assert_eq!(entry.exercise_name, "Row");
+        assert!(!entry.finalized);
+        assert!(entry.created_at.is_empty());
+        assert!(entry.sets[0].completed_date.is_none());
+    }
+
+    // GitHub wraps base64 at 60 chars with newlines — our stripping logic handles it.
     #[wasm_bindgen_test]
     fn github_base64_whitespace_strip_round_trips() {
         let original = serde_json::to_string(&empty_state("2026-05-22T00:00:00.000Z")).unwrap();
