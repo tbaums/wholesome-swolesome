@@ -15,9 +15,29 @@ services:
     volumes:
       # Repo bind-mount (read/write). Host = ../  relative to this file.
       - ../:/workspace
-      # Claude CLI auth — reuse host credentials.
-      - ${HOME}/.claude:/home/node/.claude
-      - ${HOME}/.claude.json:/home/node/.claude.json
+
+      # Container-owned Claude home. Persists across `docker compose down`
+      # so settings, history, sessions, and projects survive restarts.
+      # We deliberately do NOT mount the host's ~/.claude here: it carries
+      # /Users/... paths and is actively read/written by the host CLI,
+      # which races with the container and corrupts ~/.claude.json.
+      - claude-home:/home/node/.claude
+
+      # Auth credentials, extracted from the host (macOS Keychain on Darwin,
+      # ~/.claude/.credentials.json on Linux) by run.sh before `up`. Mounted
+      # read-only so the container can't trample the host's auth state.
+      - ${HOME}/.claude-container/.credentials.json:/home/node/.claude/.credentials.json:ro
+
+      # Share the user's global CLAUDE.md read-only so behavior in-container
+      # matches behavior on the host.
+      - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
+
+      # GitHub CLI OAuth token + git identity, extracted from the host by
+      # run.sh. The entrypoint feeds the token into `gh auth login` and runs
+      # `gh auth setup-git` so both `gh` and plain `git push/pull` work.
+      - ${HOME}/.claude-container/gh-token:/run/host-gh-token:ro
+      - ${HOME}/.claude-container/git-identity:/run/host-git-identity:ro
+
       # Persist Rust build state across container runs without polluting
       # the host's macOS target/ dir (different triple — would conflict).
       - cargo-registry:/home/node/.cargo/registry
@@ -26,9 +46,11 @@ services:
     # Bind trunk serve to all interfaces so the host can reach :8080.
     environment:
       - TRUNK_SERVE_ADDRESS=0.0.0.0
-    command: bash
+    # No `command:` — image CMD is `sleep infinity` so the container idles
+    # in the background and we attach via `docker compose exec`.
 
 volumes:
   cargo-registry:
   cargo-git:
   target-cache:
+  claude-home:
