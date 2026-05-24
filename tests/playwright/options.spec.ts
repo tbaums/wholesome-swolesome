@@ -188,7 +188,7 @@ test.describe('Options view — sync configuration', () => {
     expect(parsed).toHaveProperty('branch', 'main');
     expect(parsed).toHaveProperty('sha', 'pre-push'); // optimistic concurrency token
     const decoded = Buffer.from(parsed.content, 'base64').toString('utf8');
-    expect(decoded).toMatch(/"schema_version":\s*1/);
+    expect(decoded).toMatch(/"schema_version":\s*2/);
   });
 
   test('Push: 409 conflict surfaces the "try pulling first" toast', async ({ page }) => {
