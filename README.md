@@ -1,129 +1,85 @@
 # Wholesome Swolesome 💪
 
-A mobile-first PWA workout tracker built in Rust + Leptos (WASM). Track sets, reps, and weight while you're in the gym. No account, no backend — all data lives in your browser's localStorage.
+A mobile-first PWA workout tracker built in Rust + Leptos (WASM). Instead of hand-editing a static plan, you set training goals once and **Claude generates each day's workout** based on your goals, recent training history, and per-muscle recovery state.
 
 **Live app:** https://tbaums.github.io/wholesome-swolesome/
 
-## Features
+## What's in the app
 
-- Log sets, reps, and weight for each exercise
-- Weights auto-fill from your last session for that day
-- Session progress saved automatically — survives closing the browser
-- Full workout history with per-session detail view
-- Progress charts per exercise
-- Editable workout plan with CSV import/export
-- Installable as a PWA (Add to Home Screen on iPhone)
+- **Today** — the workout the coach has planned for today (generated locally, or imported from a nightly agent run)
+- **Library** — 133 exercises from [free-exercise-db](https://github.com/yuhonas/free-exercise-db) with photos, primary/secondary muscles, and a body silhouette per detail page
+- **Exercises** — freeform logging for anything not in a planned workout
+- **History** — a body heatmap colored by days-since-last-worked (≤3d / 4–7d / 8–14d / 15+) over a list of past sessions
+- **Options** — set your training goals (primary focus, sessions/week, session minutes, equipment, injuries/notes) and configure optional GitHub sync
 
-## Tech stack
+All data lives in `localStorage`. There is no account and no backend. Optional GitHub sync persists state to a private repo so you can use the app across devices.
 
-- [Leptos](https://leptos.dev) 0.7 (CSR) compiled to WASM via [Trunk](https://trunkrs.dev)
-- `web-sys` for localStorage, Blob/URL for CSV download
-- `serde_json` for serialization
-- Deployed to GitHub Pages via GitHub Actions
+## Using the app, end-to-end
+
+1. **Set your goals.** Open *Options* → fill in the *Training goals* card. Primary goal (hypertrophy / strength / fat loss / endurance / general), sessions per week, session minutes, available equipment, anything to avoid, freeform notes. These are what the coach plans against.
+
+2. **Get tomorrow's workout.** There are two paths, designed to be interchangeable:
+
+   - **In-app, on demand.** On the Home tab tap *🧠 Generate workout with Claude*. The *Coach Brief* view renders a markdown packet (your goals + recent training + per-muscle recovery state + the library reference). Copy it, paste it into any Claude Code chat, copy Claude's JSON response back, paste it into the bottom textarea, and tap *Import workout*. The workout lands in your scheduled list for the date you picked.
+   - **Nightly, unattended.** Run `scripts/coach/coach.sh` once to verify it works, then schedule it via Cowork to run every night. See [scripts/coach/README.md](scripts/coach/README.md) for the full setup, including the `/schedule` invocation. The nightly agent does the same flow as the in-app button, but writes the result back to your sync repo so the app picks it up next time it loads.
+
+3. **Run the workout.** On the Home tab, the *TODAY* card shows the scheduled workout. Tap *Start workout →* to enter the session view. Open each exercise's accordion, enter weight + reps for each set, tap ✓ to log it. The session auto-saves; you can close the browser mid-workout and resume.
+
+4. **Finish.** Tap *Finish Workout*. The session becomes a permanent history entry. The History tab updates the heatmap — the muscles you just worked turn deep green.
+
+5. **Repeat.** The coach reads the new history on its next run and adjusts: recently-hit muscles get prescribed less, neglected ones get prioritized, progressive overload is applied within rep ranges.
+
+## Optional: cross-device sync (GitHub backend)
+
+The app can persist state to a private GitHub repo so you can use it from both phone and laptop without re-entering data.
+
+1. Create a private repo, e.g. `you/wholesome-swolesome-data`, with an empty `state.json`.
+2. In the app, *Options → Sync (GitHub)*, paste a fine-grained personal-access token with `Contents: read+write` on that repo.
+3. Tap *Test connection*, then *Push to GitHub*.
+4. On any other device, sign in to the app, paste the same token + repo, tap *Pull from GitHub*.
+
+After that, the app debounces a push 2 seconds after any data change, and pulls fresh state on boot when the remote is newer than the local last-push timestamp.
 
 ## Development
 
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install trunk
-trunk serve          # dev server at http://localhost:8080
-trunk build --release --public-url /wholesome-swolesome/  # production build
+trunk serve              # dev server at http://localhost:8080
+trunk build --release    # production build into ./dist
 ```
 
-## Importing a workout plan
+For deploying to GitHub Pages (sets the correct base URL):
 
-Go to **Plan → Import / Export → Import Plan** and paste a CSV with this header:
-
-```
-day_id,day_name,exercise_id,exercise_name,target_sets,reps_min,reps_max,category,notes
+```bash
+trunk build --release --public-url /wholesome-swolesome/
 ```
 
-**Column reference**
+### Dev container
 
-| Column | Required | Notes |
-|--------|----------|-------|
-| `day_id` | Yes | Arbitrary string that groups exercises into the same day. Rows with the same `day_id` become one day. |
-| `day_name` | Yes | Display name for the day, e.g. `Lower A`. |
-| `exercise_id` | No | Leave blank to auto-generate a UUID. Supply one if you want stable IDs across re-imports. |
-| `exercise_name` | Yes | Display name for the exercise. |
-| `target_sets` | Yes | Integer — how many sets to pre-fill. |
-| `reps_min` | Yes | Integer — lower end of the rep range. |
-| `reps_max` | Yes | Integer — upper end of the rep range. |
-| `category` | Yes | `Main`, `Core`, or `Cardio` (case-insensitive). Anything else is treated as `Main`. |
-| `notes` | No | Free text. Can be empty or omitted. |
+A devcontainer with the full toolchain (Rust + wasm32, Trunk, wasm-pack, Node, Playwright Chromium, Claude CLI, gh) is in [.devcontainer/](.devcontainer/). Run `./.devcontainer/run.sh` to bring it up and drop into a shell.
 
-**Example**
+### Tests
 
-```csv
-day_id,day_name,exercise_id,exercise_name,target_sets,reps_min,reps_max,category,notes
-d1,Lower A,,Hip Thrust,4,6,10,Main,
-d1,Lower A,,Romanian Deadlift,3,8,12,Main,
-d1,Lower A,,Leg Press,3,10,15,Main,
-d2,Upper A,,Bench Press,4,5,8,Main,
-d2,Upper A,,Pull-Up,3,6,10,Main,
-d3,Core,,Plank,3,30,60,Core,seconds not reps
+```bash
+# Rust unit tests in WASM (state hydration, schema versions, library parsing)
+wasm-pack test --headless --firefox --lib
+
+# Playwright E2E (matches CI)
+npx playwright test
+
+# Playwright E2E locally in dev container (Chromium swap for missing WebKit)
+npx playwright test --config=playwright.local-chromium.config.ts
+
+# Walkthrough harness — full end-to-end flows with screenshots
+npx playwright test --config=playwright.walkthrough.config.ts
 ```
 
-- The header row is required.
-- Empty rows are ignored.
-- Importing replaces your entire current plan — export first if you want a backup.
-- You can download your existing plan as a starting point via **Download Plan CSV**.
+Screenshots from walkthrough runs land in `tests/playwright/screenshots/<spec-name>/` (gitignored).
 
-## Data model
+## Architecture pointer
 
-### Storage keys (localStorage)
-
-| Key | Type |
-|-----|------|
-| `ws_plan` | `WorkoutPlan` |
-| `ws_ex_history` | `Vec<ExerciseEntry>` |
-| `ws_active_session` | `Option<WorkoutSession>` |
-| `ws_session_drafts` | `Vec<WorkoutSession>` |
-| `ws_custom_exercises` | `Vec<Exercise>` |
-
-### Structs
-
-**`WorkoutPlan`** — the user's program
-Contains a list of `WorkoutDay`s. Each day has a name ("Lower A", "Push", etc.) and a list of `Exercise`s. This is what drives the Workout tab's day selector and the Exercises tab's card list.
-
-**`Exercise`** — a movement definition
-`id`, `name`, `target_sets`, `reps_min`, `reps_max`, `category` (Main/Core/Cardio), optional `notes`. These are templates — they define what to do, not what was done.
-
-**`WorkoutSession`** — an in-progress or completed named workout
-Lives in `active_session` while ongoing (persisted so a crash doesn't lose it). Has a `day_id`/`day_name`, a `date`, and a list of `ExerciseLog`s.
-
-**`ExerciseLog`** — one exercise within a session
-Mirrors the plan's `Exercise` metadata (name, target sets, rep range) plus a list of `SetLog`s that get filled in as the user works out.
-
-**`SetLog`** — one set
-`set_number`, `reps`, `weight`, `completed`, `completed_date` (the YYYY-MM-DD the ✓ was tapped — set at click time, not session-finish time).
-
-**`ExerciseEntry`** — a finalized history record
-This is the flat history format. On "Finish Workout", `WorkoutSession` is converted: one `ExerciseEntry` per exercise *per completion date* (sets done across midnight land on the correct day). Also used by the Exercises tab for freeform logging — a non-`finalized` entry is the "active" in-progress record for that exercise today.
-
-Key fields: `id`, `date`, `exercise_name`, `exercise_id`, `session_id` (links back to the originating session, `None` for freeform), `day_id`/`day_name` (`None` for freeform), `sets` (only completed sets after finalization), `finalized`, `created_at` (ISO 8601 timestamp for sort order).
-
-**Custom exercises** (`Vec<Exercise>` in `ws_custom_exercises`)
-Exercises created directly in the Exercises tab. Structurally identical to plan exercises but stored separately so they don't appear as a workout day.
-
-### Relationships
-
-```
-WorkoutPlan
-  └── WorkoutDay[]
-        └── Exercise[]          ← templates
-
-active_session: WorkoutSession
-  └── ExerciseLog[]             ← mirrors Exercise metadata + live SetLogs
-        └── SetLog[]            ← completed_date stamped at ✓ click
-
-history: ExerciseEntry[]        ← permanent record after finish
-  └── SetLog[]                  ← only completed sets kept
-
-custom_exercises: Exercise[]    ← freeform-only, never in a WorkoutDay
-```
-
-The Exercises tab uses `ExerciseEntry` with `finalized: false` as a scratchpad for today's freeform work. When the ✓ button is hit, it flips to `finalized: true` (keeping only checked sets) and becomes a permanent history record — same shape as session-derived entries.
+For implementation details — module map, state model, schema versions, etc. — see [CLAUDE.md](CLAUDE.md).
 
 ## License
 
