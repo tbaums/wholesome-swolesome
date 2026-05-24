@@ -3,7 +3,11 @@ use leptos::task::spawn_local;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 
-use crate::models::{Exercise, ExerciseEntry, ExerciseLog, SetLog, WorkoutSession};
+use crate::library;
+use crate::models::{
+    Exercise, ExerciseEntry, ExerciseLog, LibraryExercise, ScheduledWorkout, SetLog,
+    UserGoals, WorkoutSession,
+};
 use crate::storage;
 use crate::sync;
 
@@ -12,26 +16,28 @@ use crate::sync;
 #[derive(Clone, PartialEq, Debug)]
 pub enum View {
     Home,
-    Session { day_id: String },
+    Session { workout_id: String },
     Exercises,
+    Library,
+    LibraryDetail { exercise_id: String },
     History,
     SessionDetail { session_id: String },
-    PlanEditor,
-    DayEditor { day_id: String },
     Progress { exercise_name: String },
-    ImportExport,
     Options,
+    CoachPacket,
 }
 
 // ── Global state ──────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy)]
 pub struct AppState {
-    pub plan: RwSignal<crate::models::WorkoutPlan>,
+    pub goals: RwSignal<UserGoals>,
+    pub scheduled_workouts: RwSignal<Vec<ScheduledWorkout>>,
     pub history: RwSignal<Vec<ExerciseEntry>>,
     pub active_session: RwSignal<Option<WorkoutSession>>,
     pub session_drafts: RwSignal<Vec<WorkoutSession>>,
     pub custom_exercises: RwSignal<Vec<Exercise>>,
+    pub library: RwSignal<Vec<LibraryExercise>>,
     pub view: RwSignal<View>,
     pub toast: RwSignal<Option<String>>,
     pub sync_sha: RwSignal<Option<String>>,
@@ -47,7 +53,6 @@ impl AppState {
     pub fn show_toast(&self, msg: impl Into<String>) {
         let toast = self.toast;
         toast.set(Some(msg.into()));
-
         let cb = Closure::once(move || toast.set(None));
         if let Some(window) = web_sys::window() {
             let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
@@ -64,18 +69,20 @@ impl AppState {
 #[component]
 pub fn App() -> impl IntoView {
     let initial_session = storage::load_active_session();
-    let initial_view = if initial_session.is_some() {
-        View::Session { day_id: String::new() }
+    let initial_view = if let Some(ref s) = initial_session {
+        View::Session { workout_id: s.day_id.clone() }
     } else {
         View::Home
     };
 
     let state = AppState {
-        plan: RwSignal::new(storage::load_plan()),
+        goals: RwSignal::new(storage::load_goals()),
+        scheduled_workouts: RwSignal::new(storage::load_scheduled_workouts()),
         history: RwSignal::new(storage::load_exercise_history()),
         active_session: RwSignal::new(initial_session),
         session_drafts: RwSignal::new(storage::load_session_drafts()),
         custom_exercises: RwSignal::new(storage::load_custom_exercises()),
+        library: RwSignal::new(Vec::new()),
         view: RwSignal::new(initial_view),
         toast: RwSignal::new(None),
         sync_sha: RwSignal::new(None),
@@ -84,13 +91,17 @@ pub fn App() -> impl IntoView {
     };
     provide_context(state);
 
-    // Becomes true once the boot pull attempt completes (whether or not it pulled).
-    // The debounced push Effect checks this to avoid pushing data before pull finishes.
+    // Fetch exercise library asynchronously — non-blocking.
+    spawn_local(async move {
+        match library::fetch_library().await {
+            Ok(lib) => state.library.set(lib),
+            Err(e) => leptos::logging::warn!("Library load failed: {e}"),
+        }
+    });
+
     let boot_done = RwSignal::new(false);
     let debounce_handle: StoredValue<Option<i32>> = StoredValue::new(None);
 
-    // Boot-time pull: updates signals directly. boot_done is false during hydration
-    // so the debounce Effect ignores these signal changes.
     spawn_local(async move {
         let cfg = storage::load_sync_config();
         if cfg.is_configured() {
@@ -106,9 +117,8 @@ pub fn App() -> impl IntoView {
                         Some(local_ts) => remote_ts > local_ts,
                     };
                     if should_hydrate {
-                        if let Some(plan) = remote.state.plan {
-                            state.plan.set(plan);
-                        }
+                        state.goals.set(remote.state.goals);
+                        state.scheduled_workouts.set(remote.state.scheduled_workouts);
                         if !remote.state.exercise_history.is_empty() {
                             state.history.set(remote.state.exercise_history);
                         }
@@ -130,17 +140,17 @@ pub fn App() -> impl IntoView {
         boot_done.set(true);
     });
 
-    Effect::new(move |_| { storage::save_plan(&state.plan.get()); });
+    Effect::new(move |_| { storage::save_goals(&state.goals.get()); });
+    Effect::new(move |_| { storage::save_scheduled_workouts(&state.scheduled_workouts.get()); });
     Effect::new(move |_| { storage::save_exercise_history(&state.history.get()); });
     Effect::new(move |_| { storage::save_active_session(&state.active_session.get()); });
     Effect::new(move |_| { storage::save_session_drafts(&state.session_drafts.get()); });
     Effect::new(move |_| { storage::save_custom_exercises(&state.custom_exercises.get()); });
 
-    // Debounced push: 2s after any data signal changes, push to GitHub.
-    // Skips first run (initial render from localStorage) and skips until boot_done.
     Effect::new(move |prev: Option<()>| {
         let _ = (
-            state.plan.get(),
+            state.goals.get(),
+            state.scheduled_workouts.get(),
             state.history.get(),
             state.session_drafts.get(),
             state.custom_exercises.get(),
@@ -206,12 +216,14 @@ pub fn App() -> impl IntoView {
 
 pub fn build_synced_state(state: AppState) -> sync::SyncedState {
     sync::SyncedState {
-        schema_version: 1,
+        schema_version: 2,
         updated_at: Some(current_datetime()),
-        plan: Some(state.plan.get_untracked()),
+        goals: state.goals.get_untracked(),
+        scheduled_workouts: state.scheduled_workouts.get_untracked(),
         exercise_history: state.history.get_untracked(),
         session_drafts: state.session_drafts.get_untracked(),
         custom_exercises: state.custom_exercises.get_untracked(),
+        plan: None,
     }
 }
 
@@ -223,27 +235,26 @@ fn CurrentView() -> impl IntoView {
 
     move || match state.view.get() {
         View::Home => view! { <crate::components::home::HomeView/> }.into_any(),
-        View::Session { day_id } => {
-            view! { <crate::components::session::SessionView _day_id=day_id/> }.into_any()
+        View::Session { workout_id } => {
+            view! { <crate::components::session::SessionView _workout_id=workout_id/> }.into_any()
         }
         View::Exercises => view! { <crate::components::exercises::ExercisesView/> }.into_any(),
+        View::Library => view! { <crate::components::library_view::LibraryView/> }.into_any(),
+        View::LibraryDetail { exercise_id } => {
+            view! { <crate::components::library_view::LibraryDetailView exercise_id=exercise_id/> }
+                .into_any()
+        }
         View::History => view! { <crate::components::history::HistoryView/> }.into_any(),
         View::SessionDetail { session_id } => {
             view! { <crate::components::history::SessionDetailView session_id=session_id/> }
                 .into_any()
         }
-        View::PlanEditor => view! { <crate::components::plan_editor::PlanEditorView/> }.into_any(),
-        View::DayEditor { day_id } => {
-            view! { <crate::components::plan_editor::DayEditorView day_id=day_id/> }.into_any()
-        }
         View::Progress { exercise_name } => {
             view! { <crate::components::progress::ProgressView exercise_name=exercise_name/> }
                 .into_any()
         }
-        View::ImportExport => {
-            view! { <crate::components::plan_editor::ImportExportView/> }.into_any()
-        }
         View::Options => view! { <crate::components::options::OptionsView/> }.into_any(),
+        View::CoachPacket => view! { <crate::components::options::CoachPacketView/> }.into_any(),
     }
 }
 
@@ -255,14 +266,18 @@ fn BottomNav() -> impl IntoView {
     let view = state.view;
 
     let is_home = move || matches!(view.get(), View::Home | View::Session { .. });
+    let is_library = move || matches!(view.get(), View::Library | View::LibraryDetail { .. });
     let is_exercises = move || matches!(view.get(), View::Exercises);
     let is_history = move || {
         matches!(
             view.get(),
-            View::History | View::SessionDetail { .. } | View::Progress { .. } | View::Options
+            View::History
+                | View::SessionDetail { .. }
+                | View::Progress { .. }
+                | View::Options
+                | View::CoachPacket
         )
     };
-    let is_plan = move || matches!(view.get(), View::PlanEditor | View::DayEditor { .. } | View::ImportExport);
 
     view! {
         <nav class="bottom-nav">
@@ -277,7 +292,17 @@ fn BottomNav() -> impl IntoView {
                 </span>
                 <span>"Workout"</span>
             </button>
-            // Exercises — list
+            // Library — book
+            <button class="nav-btn" class:active=is_library on:click=move |_| state.navigate(View::Library)>
+                <span class="icon">
+                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 4.5A2.5 2.5 0 016.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15z"/>
+                        <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+                    </svg>
+                </span>
+                <span>"Library"</span>
+            </button>
+            // Exercises — list (freeform logging)
             <button class="nav-btn" class:active=is_exercises on:click=move |_| state.navigate(View::Exercises)>
                 <span class="icon">
                     <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -290,17 +315,6 @@ fn BottomNav() -> impl IntoView {
                     </svg>
                 </span>
                 <span>"Exercises"</span>
-            </button>
-            // Plan — clipboard
-            <button class="nav-btn" class:active=is_plan on:click=move |_| state.navigate(View::PlanEditor)>
-                <span class="icon">
-                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
-                        <rect x="9" y="3" width="6" height="4" rx="1"/>
-                        <path d="M9 12h6M9 16h4"/>
-                    </svg>
-                </span>
-                <span>"Plan"</span>
             </button>
             // History — trending up
             <button class="nav-btn" class:active=is_history on:click=move |_| state.navigate(View::History)>
@@ -330,38 +344,18 @@ fn Toast() -> impl IntoView {
 
 // ── Session factory ───────────────────────────────────────────────────────────
 
-/// Creates a new WorkoutSession for `day_id`, pre-filling weights/reps from the
-/// most recent session for that day (looked up from the flat ExerciseEntry history).
-pub fn new_session(
-    day_id: &str,
-    plan: &crate::models::WorkoutPlan,
+/// Builds a WorkoutSession from a ScheduledWorkout, pre-filling weights/reps
+/// from the most recent matching ExerciseEntry in history (matched by
+/// library_id when available, else by exercise name).
+pub fn new_session_from_scheduled(
+    workout: &ScheduledWorkout,
     history: &[ExerciseEntry],
-) -> Option<WorkoutSession> {
-    let day = plan.days.iter().find(|d| d.id == day_id)?;
-
-    // Find the most recent session_id for this day
-    let last_session_id = history
-        .iter()
-        .rev()
-        .filter(|e| e.day_id.as_deref() == Some(day_id))
-        .filter_map(|e| e.session_id.as_deref())
-        .next()
-        .map(|s| s.to_string());
-
-    let exercise_logs: Vec<ExerciseLog> = day
+) -> WorkoutSession {
+    let exercise_logs: Vec<ExerciseLog> = workout
         .exercises
         .iter()
         .map(|ex| {
-            let (default_weight, default_reps) = last_session_id
-                .as_deref()
-                .and_then(|sid| {
-                    history
-                        .iter()
-                        .find(|e| {
-                            e.session_id.as_deref() == Some(sid) && e.exercise_id == ex.id
-                        })
-                })
-                .and_then(|e| e.sets.iter().filter(|s| s.completed).last())
+            let (default_weight, default_reps) = last_completed_for(history, ex)
                 .map(|s| (s.weight, s.reps))
                 .unwrap_or((0.0, ex.reps_min));
 
@@ -376,7 +370,7 @@ pub fn new_session(
                 .collect();
 
             ExerciseLog {
-                exercise_id: ex.id.clone(),
+                exercise_id: ex.library_id.clone().unwrap_or_else(|| ex.name.clone()),
                 exercise_name: ex.name.clone(),
                 target_sets: ex.target_sets,
                 reps_min: ex.reps_min,
@@ -386,14 +380,33 @@ pub fn new_session(
         })
         .collect();
 
-    Some(WorkoutSession {
+    WorkoutSession {
         id: uuid::Uuid::new_v4().to_string(),
         date: current_date(),
-        day_id: day.id.clone(),
-        day_name: day.name.clone(),
+        day_id: workout.id.clone(),
+        day_name: workout.name.clone(),
         exercise_logs,
         is_complete: false,
-    })
+    }
+}
+
+fn last_completed_for<'a>(
+    history: &'a [ExerciseEntry],
+    ex: &crate::models::ScheduledExercise,
+) -> Option<&'a SetLog> {
+    let name_lc = ex.name.to_lowercase();
+    history
+        .iter()
+        .rev()
+        .filter(|e| {
+            // Match by library_id (stored in exercise_id) when available, else by name.
+            match ex.library_id.as_deref() {
+                Some(id) if !id.is_empty() => e.exercise_id == id,
+                _ => e.exercise_name.to_lowercase() == name_lc,
+            }
+        })
+        .flat_map(|e| e.sets.iter().rev())
+        .find(|s| s.completed)
 }
 
 pub fn current_date() -> String {
@@ -402,7 +415,7 @@ pub fn current_date() -> String {
         "{:04}-{:02}-{:02}",
         date.get_full_year(),
         date.get_month() + 1,
-        date.get_date()
+        date.get_date(),
     )
 }
 

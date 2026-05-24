@@ -9,7 +9,9 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use gloo_net::http::Request;
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Exercise, ExerciseEntry, WorkoutPlan, WorkoutSession};
+use crate::models::{
+    Exercise, ExerciseEntry, ScheduledWorkout, UserGoals, WorkoutPlan, WorkoutSession,
+};
 
 const API_BASE: &str = "https://api.github.com";
 
@@ -40,13 +42,20 @@ impl SyncConfig {
 pub struct SyncedState {
     pub schema_version: u32,
     pub updated_at: Option<String>,
-    pub plan: Option<WorkoutPlan>,
+    #[serde(default)]
+    pub goals: UserGoals,
+    #[serde(default)]
+    pub scheduled_workouts: Vec<ScheduledWorkout>,
     #[serde(default)]
     pub exercise_history: Vec<ExerciseEntry>,
     #[serde(default)]
     pub session_drafts: Vec<WorkoutSession>,
     #[serde(default)]
     pub custom_exercises: Vec<Exercise>,
+    /// Legacy: preserved on read so old state.json files don't lose data,
+    /// but the app no longer uses it. Kept serializing for safety.
+    #[serde(default)]
+    pub plan: Option<WorkoutPlan>,
 }
 
 #[derive(Debug, Clone)]

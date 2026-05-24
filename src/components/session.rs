@@ -5,7 +5,7 @@ use crate::app::{AppState, View};
 // ── Session view ──────────────────────────────────────────────────────────────
 
 #[component]
-pub fn SessionView(_day_id: String) -> impl IntoView {
+pub fn SessionView(_workout_id: String) -> impl IntoView {
     let state = expect_context::<AppState>();
 
     // Memo only fires when None↔Some flips — not on every set toggle —

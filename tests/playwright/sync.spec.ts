@@ -174,10 +174,10 @@ test.describe('Sync: boot pull', () => {
     await seedAndReload(page, { ws_gh_sync: SYNC_CFG });
     await page.waitForSelector('.bottom-nav');
     // 404 is treated as benign (first-time push), so the app lands on Home
-    // with the day grid visible. That's the contract — the absence of an
-    // error toast is the same fact, just observed via a different signal.
-    await expect(page.locator('.btn.btn-secondary.btn-full').first()).toBeVisible();
-    await expect(page.locator('.btn.btn-secondary.btn-full')).toHaveCount(7);
+    // and renders normally. The absence of an error toast is the contract;
+    // we observe it indirectly via the home title being present + no toast.
+    await expect(page.locator('.page-title')).toContainText('Wholesome Swolesome');
+    await expect(page.locator('.toast')).toHaveCount(0);
   });
 });
 
@@ -212,7 +212,7 @@ test.describe('Sync: debounced auto-push', () => {
 
     // Trigger a data change: create a custom exercise
     await page.locator('.nav-btn').filter({ hasText: 'Exercises' }).click();
-    await page.waitForSelector('.ex-card');
+    await page.waitForSelector('.new-exercise-btn');
     await page.locator('.new-exercise-btn').click();
     await page.locator('.new-exercise-form input[type="text"]').fill('Sync Test Exercise');
     await page.locator('.new-exercise-form button').filter({ hasText: 'Add' }).click();
@@ -259,7 +259,7 @@ test.describe('Sync: debounced auto-push', () => {
 
     // Trigger a data change
     await page.locator('.nav-btn').filter({ hasText: 'Exercises' }).click();
-    await page.waitForSelector('.ex-card');
+    await page.waitForSelector('.new-exercise-btn');
     await page.locator('.new-exercise-btn').click();
     await page.locator('.new-exercise-form input[type="text"]').fill('Conflict Retry');
     await page.locator('.new-exercise-form button').filter({ hasText: 'Add' }).click();

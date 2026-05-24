@@ -10,7 +10,9 @@
   <title>Wholesome Swolesome</title>
   <link rel="manifest" href="manifest.json">
   <link data-trunk rel="rust" data-wasm-opt="z" data-bin="wholesome-swolesome"/>
-  <link data-trunk rel="copy-dir" href="public"/>
+  <link data-trunk rel="copy-dir" href="public/data"/>
+  <link data-trunk rel="copy-file" href="public/manifest.json"/>
+  <link data-trunk rel="copy-file" href="public/sw.js"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -608,6 +610,249 @@
       pointer-events: none;
       animation: slideUp 0.2s ease-out;
       box-shadow: 0 4px 20px rgba(168,85,247,0.3);
+    }
+
+    /* ── Body heatmap ── */
+    .heatmap-wrap {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 12px;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .heatmap-wrap::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 5px;
+      background: var(--trans);
+    }
+    .heatmap-row {
+      display: flex;
+      justify-content: space-around;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .body-svg {
+      /* viewBox is 200x440 — pin the CSS box to the same 1:2.2 ratio so
+         the lower body (calves/feet at y≈430) isn't clipped. Letting
+         `height: auto` derive from intrinsic SVG ratio is unreliable
+         across browsers; aspect-ratio makes it explicit. */
+      width: 48%;
+      aspect-ratio: 200 / 440;
+      height: auto;
+      display: block;
+    }
+    .heatmap-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 10px;
+      justify-content: center;
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+    .legend-label { font-weight: 600; }
+
+    /* ── Library browser ── */
+    .library-search {
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .filter-chip {
+      background: var(--surface2);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+    .filter-chip.active {
+      background: var(--accent);
+      color: #0f0d1f;
+      border-color: var(--accent);
+    }
+    .library-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      position: relative;
+      overflow: hidden;
+    }
+    .library-item::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 3px;
+      background: var(--trans);
+    }
+    .library-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: var(--surface2);
+      flex-shrink: 0;
+    }
+    .library-item-name {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .library-item-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .lib-detail-images {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .lib-detail-img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border-radius: var(--radius);
+      background: var(--surface2);
+    }
+    .lib-detail-instructions {
+      margin-top: 12px;
+    }
+    .lib-detail-instructions li {
+      margin-left: 18px;
+      margin-bottom: 6px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .lib-tag {
+      display: inline-block;
+      background: var(--surface2);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      margin-right: 4px;
+      margin-bottom: 4px;
+    }
+    .lib-tag.primary  { color: var(--pink);  border-color: var(--pink); }
+
+    /* ── Scheduled workout card ── */
+    .today-card {
+      background: linear-gradient(135deg, #1c1535 0%, #2a1040 100%);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+      position: relative;
+      overflow: hidden;
+      border: 1.5px solid var(--purple);
+      box-shadow: 0 4px 24px rgba(168,85,247,0.18);
+    }
+    .today-badge {
+      display: inline-block;
+      background: var(--trans);
+      color: #0f0d1f;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 10px;
+      border-radius: 12px;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+    .today-title {
+      font-size: 18px;
+      font-weight: 800;
+      background: var(--trans);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 4px;
+    }
+    .today-rationale {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 6px 0 10px;
+      line-height: 1.45;
+    }
+    .today-ex-list {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 12px;
+    }
+    .today-ex-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .today-ex-row:first-child { border-top: none; }
+    .today-ex-name { font-weight: 600; }
+    .today-ex-prescription { color: var(--text-muted); font-size: 12px; }
+
+    /* ── Goals editor ── */
+    .goal-pill {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 16px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+    .goal-pill.active {
+      background: var(--accent);
+      color: #0f0d1f;
+      border-color: var(--accent);
+    }
+
+    /* ── Coach packet ── */
+    .coach-packet-pre {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 60vh;
+      overflow: auto;
     }
 
     /* ── Utilities ── */

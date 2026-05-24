@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
-use crate::app::{new_session, AppState, View};
+use crate::app::{current_date, new_session_from_scheduled, AppState, View};
+use crate::models::ScheduledWorkout;
 
 #[component]
 pub fn HomeView() -> impl IntoView {
@@ -10,104 +11,177 @@ pub fn HomeView() -> impl IntoView {
                 <h1 class="page-title">"Wholesome Swolesome 💪"</h1>
             </div>
 
-            <DayGrid/>
+            <TodayCard/>
+            <UpcomingList/>
+            <CoachActions/>
             <RecentSessions/>
         </div>
     }
 }
 
-// ── Day selection grid ────────────────────────────────────────────────────────
+// ── Today's workout ──────────────────────────────────────────────────────────
 
 #[component]
-fn DayGrid() -> impl IntoView {
+fn TodayCard() -> impl IntoView {
     let state = expect_context::<AppState>();
-    let plan = state.plan;
 
-    let enumerated_days = move || {
-        plan.get().days.into_iter().enumerate().collect::<Vec<_>>()
+    let today_workout = move || -> Option<ScheduledWorkout> {
+        let today = current_date();
+        state
+            .scheduled_workouts
+            .get()
+            .into_iter()
+            .find(|w| w.date == today)
     };
 
     view! {
-        <div class="card">
-            <div class="card-title">"Select Today's Workout"</div>
-            <div class="card-sub" style="margin-bottom:8px">"Tap a day to begin"</div>
-            <div style="margin-top:12px">
-                <For
-                    each=enumerated_days
-                    key=|(_, day)| day.id.clone()
-                    children=move |(idx, day)| {
-                        let day_id = day.id.clone();
-                        let day_num = idx + 1;
-                        let ex_count = day.exercises.len();
-                        let on_start = {
-                            let day_id = day_id.clone();
-                            move |_| {
-                                let existing = state.active_session.get_untracked();
+        {move || match today_workout() {
+            Some(w) => view! { <ScheduledCard workout=w label="TODAY"/> }.into_any(),
+            None => view! {
+                <div class="today-card">
+                    <span class="today-badge">"TODAY"</span>
+                    <div class="today-title">"No workout scheduled"</div>
+                    <div class="today-rationale">
+                        "The coach hasn't planned today's session yet. Generate one now or check back after midnight."
+                    </div>
+                </div>
+            }.into_any(),
+        }}
+    }
+}
 
-                                // Same day already active — just resume
-                                if let Some(ref s) = existing {
-                                    if s.day_id == day_id {
-                                        state.navigate(View::Session { day_id: day_id.clone() });
-                                        return;
-                                    }
-                                    // Different day — shelve current session to drafts
-                                    state.session_drafts.update(|drafts| {
-                                        let s = existing.clone().unwrap();
-                                        if let Some(pos) = drafts.iter().position(|d| d.day_id == s.day_id) {
-                                            drafts[pos] = s;
-                                        } else {
-                                            drafts.push(s);
-                                        }
-                                    });
-                                    state.active_session.set(None);
-                                }
-
-                                // Check drafts for the requested day
-                                let draft = state.session_drafts.get_untracked()
-                                    .into_iter()
-                                    .find(|d| d.day_id == day_id);
-
-                                if let Some(d) = draft {
-                                    state.session_drafts.update(|drafts| drafts.retain(|d| d.day_id != day_id));
-                                    state.active_session.set(Some(d));
-                                } else {
-                                    let session = new_session(&day_id, &state.plan.get(), &state.history.get());
-                                    if let Some(s) = session {
-                                        state.active_session.set(Some(s));
-                                    }
-                                }
-                                state.navigate(View::Session { day_id: day_id.clone() });
-                            }
-                        };
-                        view! {
-                            <button
-                                class="btn btn-secondary btn-full"
-                                style="justify-content:space-between; margin-bottom:8px"
-                                on:click=on_start
-                            >
-                                <span style="display:flex; flex-direction:column; align-items:flex-start; gap:1px">
-                                    <span style="font-size:11px; color:var(--text-muted); font-weight:500">
-                                        "Day " {day_num}
-                                    </span>
-                                    <span>{day.name}</span>
-                                    <span class="text-muted text-sm">{ex_count} " exercises"</span>
-                                </span>
-                            </button>
-                        }
+#[component]
+fn ScheduledCard(workout: ScheduledWorkout, #[prop()] label: &'static str) -> impl IntoView {
+    let state = expect_context::<AppState>();
+    let w_clone = workout.clone();
+    let start = move |_| {
+        let history = state.history.get_untracked();
+        let session = new_session_from_scheduled(&w_clone, &history);
+        let workout_id = w_clone.id.clone();
+        let existing = state.active_session.get_untracked();
+        if let Some(s) = existing {
+            if s.day_id != workout_id {
+                state.session_drafts.update(|drafts| {
+                    if let Some(pos) = drafts.iter().position(|d| d.day_id == s.day_id) {
+                        drafts[pos] = s;
+                    } else {
+                        drafts.push(s);
                     }
-                />
-            </div>
+                });
+            }
+        }
+        // Resume from draft if present
+        let draft = state
+            .session_drafts
+            .get_untracked()
+            .into_iter()
+            .find(|d| d.day_id == workout_id);
+        if let Some(d) = draft {
+            state
+                .session_drafts
+                .update(|drafts| drafts.retain(|d| d.day_id != workout_id));
+            state.active_session.set(Some(d));
+        } else {
+            state.active_session.set(Some(session));
+        }
+        state.navigate(View::Session { workout_id });
+    };
+
+    let rationale = workout.rationale.clone();
+    let date = workout.date.clone();
+    let name = workout.name.clone();
+    let exercises = workout.exercises.clone();
+
+    view! {
+        <div class="today-card">
+            <span class="today-badge">{label}</span>
+            <div class="today-title">{name}</div>
+            <div class="text-muted text-sm" style="margin-bottom:8px">{date}</div>
+            {(!rationale.is_empty()).then(|| view! {
+                <div class="today-rationale">{rationale}</div>
+            })}
+            <ul class="today-ex-list">
+                {exercises.iter().map(|ex| {
+                    let prescription = format!("{}×{}-{}", ex.target_sets, ex.reps_min, ex.reps_max);
+                    view! {
+                        <li class="today-ex-row">
+                            <span class="today-ex-name">{ex.name.clone()}</span>
+                            <span class="today-ex-prescription">{prescription}</span>
+                        </li>
+                    }
+                }).collect_view()}
+            </ul>
+            <button class="btn btn-finish btn-full" on:click=start>"Start workout →"</button>
         </div>
     }
 }
 
-// ── Recent sessions ───────────────────────────────────────────────────────────
+// ── Upcoming ─────────────────────────────────────────────────────────────────
 
-/// A deduplicated session group derived from flat ExerciseEntry history.
+#[component]
+fn UpcomingList() -> impl IntoView {
+    let state = expect_context::<AppState>();
+
+    let upcoming = move || {
+        let today = current_date();
+        let mut v: Vec<ScheduledWorkout> = state
+            .scheduled_workouts
+            .get()
+            .into_iter()
+            .filter(|w| w.date.as_str() > today.as_str())
+            .collect();
+        v.sort_by(|a, b| a.date.cmp(&b.date));
+        v.into_iter().take(3).collect::<Vec<_>>()
+    };
+
+    view! {
+        {move || {
+            let list = upcoming();
+            if list.is_empty() { ().into_any() } else {
+                view! {
+                    <div class="card">
+                        <div class="card-title">"Upcoming"</div>
+                        {list.into_iter().map(|w| {
+                            let prescription = format!("{} exercises", w.exercises.len());
+                            view! {
+                                <div class="history-item" style="padding:8px 0; border-top:1px solid var(--border)">
+                                    <div>
+                                        <div class="fw-600">{w.name.clone()}</div>
+                                        <div class="history-date">{w.date.clone()}</div>
+                                    </div>
+                                    <div class="history-stats">{prescription}</div>
+                                </div>
+                            }
+                        }).collect_view()}
+                    </div>
+                }.into_any()
+            }
+        }}
+    }
+}
+
+// ── Coach actions ────────────────────────────────────────────────────────────
+
+#[component]
+fn CoachActions() -> impl IntoView {
+    let state = expect_context::<AppState>();
+    view! {
+        <button
+            class="btn btn-secondary btn-full"
+            style="margin-bottom:8px"
+            on:click=move |_| state.navigate(View::CoachPacket)
+        >
+            "🧠  Generate workout with Claude"
+        </button>
+    }
+}
+
+// ── Recent sessions ──────────────────────────────────────────────────────────
+
 #[derive(Clone)]
 struct SessionGroup {
-    key: String,       // session_id, or "freeform-{date}"
-    label: String,     // day name or "Freeform"
+    key: String,
+    label: String,
     date: String,
     n_exercises: usize,
     completed_sets: usize,
