@@ -10,10 +10,12 @@ FROM node:22-bookworm
 # System deps:
 #   - build-essential, pkg-config, libssl-dev: building Rust crates with C deps
 #   - git, curl, ca-certificates: general dev
+#   - sox: voice input for `claude` (records mic audio via `rec`)
 #   - Playwright Chromium runtime deps (fonts, libs)
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential pkg-config libssl-dev \
       git curl ca-certificates gnupg \
+      sox \
       libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
       libdrm2 libdbus-1-3 libxkbcommon0 libxcomposite1 libxdamage1 \
       libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
