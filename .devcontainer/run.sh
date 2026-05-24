@@ -61,9 +61,39 @@ if ! printf '%s' "${extracted}" | python3 -c 'import json,sys; json.load(sys.std
   exit 1
 fi
 
-umask 077
-printf '%s' "${extracted}" > "${cred_file}"
-chmod 600 "${cred_file}"
+# Only overwrite the cached credentials file if it's missing or older than
+# the Keychain copy. The mount is now read-write so the container refreshes
+# OAuth access tokens in place; clobbering on every `run.sh` invocation would
+# stomp those refreshes with a stale Keychain snapshot whenever the user
+# hadn't recently run `claude` on the host.
+should_write=1
+if [[ -s "${cred_file}" ]]; then
+  if newer_in_file="$(
+        FILE_JSON="$(cat "${cred_file}")" \
+        KEYCHAIN_JSON="${extracted}" \
+        python3 - <<'PY'
+import json, os, sys
+try:
+    f = json.loads(os.environ["FILE_JSON"]).get("claudeAiOauth", {})
+    k = json.loads(os.environ["KEYCHAIN_JSON"]).get("claudeAiOauth", {})
+except Exception:
+    sys.exit(2)
+f_exp = f.get("expiresAt") or 0
+k_exp = k.get("expiresAt") or 0
+# Exit 0 = file is at least as fresh as keychain; skip the write.
+# Exit 1 = keychain is newer; overwrite.
+sys.exit(0 if f_exp >= k_exp else 1)
+PY
+      )"; then
+    should_write=0
+  fi
+fi
+
+if (( should_write )); then
+  umask 077
+  printf '%s' "${extracted}" > "${cred_file}"
+  chmod 600 "${cred_file}"
+fi
 
 # --- Refresh host-side gh token + git identity for the container ----------
 gh_token_file="${cred_dir}/gh-token"

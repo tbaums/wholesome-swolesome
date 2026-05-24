@@ -24,9 +24,12 @@ services:
       - claude-home:/home/node/.claude
 
       # Auth credentials, extracted from the host (macOS Keychain on Darwin,
-      # ~/.claude/.credentials.json on Linux) by run.sh before `up`. Mounted
-      # read-only so the container can't trample the host's auth state.
-      - ${HOME}/.claude-container/.credentials.json:/home/node/.claude/.credentials.json:ro
+      # ~/.claude/.credentials.json on Linux) by run.sh on first creation.
+      # Mounted read-write so the in-container CLI can refresh expiring OAuth
+      # access tokens in place. The file lives under ~/.claude-container/ on
+      # the host (NOT the host's ~/.claude or Keychain), so writes here can't
+      # trample host auth state.
+      - ${HOME}/.claude-container/.credentials.json:/home/node/.claude/.credentials.json
 
       # Share the user's global CLAUDE.md read-only so behavior in-container
       # matches behavior on the host.
