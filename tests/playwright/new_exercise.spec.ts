@@ -6,7 +6,12 @@ async function goToExercises(page: Parameters<typeof freshPage>[0]) {
   await page.waitForSelector('.new-exercise-btn');
 }
 
-test.describe('New exercise creation', () => {
+async function openPicker(page: Parameters<typeof freshPage>[0]) {
+  await page.locator('.new-exercise-btn').click();
+  await page.waitForSelector('.new-exercise-search');
+}
+
+test.describe('New exercise picker (library + custom fallback)', () => {
   test.beforeEach(async ({ page }) => {
     await freshPage(page);
     await goToExercises(page);
@@ -18,91 +23,113 @@ test.describe('New exercise creation', () => {
   });
 
   // 2
-  test('clicking the button reveals the new-exercise form', async ({ page }) => {
+  test('clicking the button reveals the picker', async ({ page }) => {
     await expect(page.locator('.new-exercise-form')).not.toBeVisible();
-    await page.locator('.new-exercise-btn').click();
+    await openPicker(page);
     await expect(page.locator('.new-exercise-form')).toBeVisible();
+    await expect(page.locator('.new-exercise-search')).toBeVisible();
   });
 
   // 3
-  test('Add button is disabled when the name field is empty', async ({ page }) => {
-    await page.locator('.new-exercise-btn').click();
-    const addBtn = page.locator('.new-exercise-form button').filter({ hasText: 'Add' });
-    await expect(addBtn).toBeDisabled();
+  test('library results render when the picker opens', async ({ page }) => {
+    await openPicker(page);
+    // Library is fetched asynchronously; give it a moment.
+    await expect(page.locator('.new-exercise-result').first()).toBeVisible({ timeout: 10_000 });
+    const count = await page.locator('.new-exercise-result').count();
+    expect(count).toBeGreaterThan(1);
   });
 
   // 4
-  test('Add button enables once a name is typed', async ({ page }) => {
-    await page.locator('.new-exercise-btn').click();
-    await page.locator('.new-exercise-form input[type="text"]').fill('Cable Fly');
-    const addBtn = page.locator('.new-exercise-form button').filter({ hasText: 'Add' });
-    await expect(addBtn).toBeEnabled();
+  test('typing in the search box filters the results', async ({ page }) => {
+    await openPicker(page);
+    await page.waitForSelector('.new-exercise-result');
+    await page.locator('.new-exercise-search').fill('treadmill');
+    // All visible results should contain "treadmill" (case-insensitive)
+    const names = await page.locator('.new-exercise-result .library-item-name').allTextContents();
+    expect(names.length).toBeGreaterThan(0);
+    for (const n of names) {
+      expect(n.toLowerCase()).toContain('treadmill');
+    }
   });
 
   // 5
-  test('saving adds a new exercise card to the list', async ({ page }) => {
+  test('tapping a library result adds it as a card and closes the picker', async ({ page }) => {
     const before = await page.locator('.ex-card').count();
-    await page.locator('.new-exercise-btn').click();
-    await page.locator('.new-exercise-form input[type="text"]').fill('Cable Fly');
-    await page.locator('.new-exercise-form button').filter({ hasText: 'Add' }).click();
+    await openPicker(page);
+    await page.waitForSelector('.new-exercise-result');
+    await page.locator('.new-exercise-search').fill('treadmill');
+    const firstName = await page
+      .locator('.new-exercise-result .library-item-name')
+      .first()
+      .textContent();
+    await page.locator('.new-exercise-result').first().click();
+
+    await expect(page.locator('.new-exercise-form')).not.toBeVisible();
     await expect(page.locator('.ex-card')).toHaveCount(before + 1);
-    await expect(page.locator('.ex-card').filter({ hasText: 'Cable Fly' })).toBeVisible();
+    await expect(
+      page.locator('.ex-card').filter({ hasText: firstName!.trim() }),
+    ).toBeVisible();
   });
 
   // 6
-  test('form is hidden after a successful save', async ({ page }) => {
-    await page.locator('.new-exercise-btn').click();
-    await page.locator('.new-exercise-form input[type="text"]').fill('Cable Fly');
-    await page.locator('.new-exercise-form button').filter({ hasText: 'Add' }).click();
-    await expect(page.locator('.new-exercise-form')).not.toBeVisible();
+  test('newly-added exercise opens its accordion automatically', async ({ page }) => {
+    await openPicker(page);
+    await page.waitForSelector('.new-exercise-result');
+    await page.locator('.new-exercise-search').fill('treadmill');
+    const firstName = (
+      await page.locator('.new-exercise-result .library-item-name').first().textContent()
+    )!.trim();
+    await page.locator('.new-exercise-result').first().click();
+
+    const card = page.locator('.ex-card').filter({ hasText: firstName });
+    await expect(card.locator('.exercise-body')).toHaveClass(/open/);
+    await expect(card.locator('.set-row').first()).toBeVisible();
   });
 
   // 7
-  test('Cancel button hides the form without adding an exercise', async ({ page }) => {
+  test('Cancel hides the picker without adding anything', async ({ page }) => {
     const before = await page.locator('.ex-card').count();
-    await page.locator('.new-exercise-btn').click();
-    await page.locator('.new-exercise-form input[type="text"]').fill('Cable Fly');
+    await openPicker(page);
+    await page.locator('.new-exercise-search').fill('treadmill');
     await page.locator('.new-exercise-form button').filter({ hasText: 'Cancel' }).click();
     await expect(page.locator('.new-exercise-form')).not.toBeVisible();
     await expect(page.locator('.ex-card')).toHaveCount(before);
   });
 
   // 8
-  test('new exercise persists after page reload', async ({ page }) => {
-    await page.locator('.new-exercise-btn').click();
-    await page.locator('.new-exercise-form input[type="text"]').fill('Cable Fly');
-    await page.locator('.new-exercise-form button').filter({ hasText: 'Add' }).click();
+  test('"+ Use ... as custom" appears for queries with no exact library match', async ({ page }) => {
+    await openPicker(page);
+    await page.waitForSelector('.new-exercise-result');
+    await page.locator('.new-exercise-search').fill('My Special Lift xyzzy');
+    await expect(page.locator('.new-exercise-custom')).toBeVisible();
+    await expect(page.locator('.new-exercise-custom')).toContainText('My Special Lift xyzzy');
+  });
+
+  // 9
+  test('tapping the custom fallback creates a freeform exercise card', async ({ page }) => {
+    const before = await page.locator('.ex-card').count();
+    await openPicker(page);
+    await page.waitForSelector('.new-exercise-result');
+    await page.locator('.new-exercise-search').fill('Cable Fly');
+    await page.locator('.new-exercise-custom').click();
+    await expect(page.locator('.ex-card')).toHaveCount(before + 1);
     await expect(page.locator('.ex-card').filter({ hasText: 'Cable Fly' })).toBeVisible();
+  });
+
+  // 10
+  test('added exercise persists after page reload', async ({ page }) => {
+    await openPicker(page);
+    await page.waitForSelector('.new-exercise-result');
+    await page.locator('.new-exercise-search').fill('treadmill');
+    const firstName = (
+      await page.locator('.new-exercise-result .library-item-name').first().textContent()
+    )!.trim();
+    await page.locator('.new-exercise-result').first().click();
+    await expect(page.locator('.ex-card').filter({ hasText: firstName })).toBeVisible();
 
     await page.reload();
     await page.waitForSelector('.bottom-nav');
     await goToExercises(page);
-    await expect(page.locator('.ex-card').filter({ hasText: 'Cable Fly' })).toBeVisible();
-  });
-
-  // 9
-  test('new exercise card can be expanded and sets logged', async ({ page }) => {
-    await page.locator('.new-exercise-btn').click();
-    await page.locator('.new-exercise-form input[type="text"]').fill('Cable Fly');
-    await page.locator('.new-exercise-form button').filter({ hasText: 'Add' }).click();
-
-    const card = page.locator('.ex-card').filter({ hasText: 'Cable Fly' });
-    await card.locator('.exercise-chevron').click();
-    await expect(card.locator('.exercise-body')).toHaveClass(/open/);
-    await expect(card.locator('.set-row').first()).toBeVisible();
-  });
-
-  // 10
-  test('custom reps min/max appear in the exercise meta', async ({ page }) => {
-    await page.locator('.new-exercise-btn').click();
-    await page.locator('.new-exercise-form input[type="text"]').fill('Cable Fly');
-    // Change reps min to 6, reps max to 10
-    const inputs = page.locator('.new-exercise-form input[type="number"]');
-    await inputs.nth(1).fill('6');   // reps_min
-    await inputs.nth(2).fill('10');  // reps_max
-    await page.locator('.new-exercise-form button').filter({ hasText: 'Add' }).click();
-
-    const card = page.locator('.ex-card').filter({ hasText: 'Cable Fly' });
-    await expect(card.locator('.exercise-meta')).toContainText('6–10');
+    await expect(page.locator('.ex-card').filter({ hasText: firstName })).toBeVisible();
   });
 });

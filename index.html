@@ -766,6 +766,31 @@
     }
     .lib-tag.primary  { color: var(--pink);  border-color: var(--pink); }
 
+    /* ── New-exercise picker (library search) ── */
+    .new-exercise-search {
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .new-exercise-results {
+      max-height: 50vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 0 -4px;
+      padding: 0 4px;
+    }
+    .new-exercise-result {
+      background: var(--surface2);
+    }
+    .new-exercise-custom {
+      background: var(--surface2);
+    }
+    .new-exercise-custom::before {
+      background: var(--accent);
+    }
+    .new-exercise-custom .library-item-name {
+      color: var(--accent);
+    }
+
     /* ── Scheduled workout card ── */
     .today-card {
       background: linear-gradient(135deg, #1c1535 0%, #2a1040 100%);

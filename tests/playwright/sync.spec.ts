@@ -210,12 +210,13 @@ test.describe('Sync: debounced auto-push', () => {
     // Wait for boot pull to complete so boot_done is true
     await page.waitForTimeout(500);
 
-    // Trigger a data change: create a custom exercise
+    // Trigger a data change: create a custom exercise via the picker fallback
     await page.locator('.nav-btn').filter({ hasText: 'Exercises' }).click();
     await page.waitForSelector('.new-exercise-btn');
     await page.locator('.new-exercise-btn').click();
-    await page.locator('.new-exercise-form input[type="text"]').fill('Sync Test Exercise');
-    await page.locator('.new-exercise-form button').filter({ hasText: 'Add' }).click();
+    await page.waitForSelector('.new-exercise-search');
+    await page.locator('.new-exercise-search').fill('Sync Test Exercise');
+    await page.locator('.new-exercise-custom').click();
 
     // Auto-push fires 2s after the change
     await expect.poll(() => putCount, { timeout: 6000 }).toBeGreaterThanOrEqual(1);
@@ -261,8 +262,9 @@ test.describe('Sync: debounced auto-push', () => {
     await page.locator('.nav-btn').filter({ hasText: 'Exercises' }).click();
     await page.waitForSelector('.new-exercise-btn');
     await page.locator('.new-exercise-btn').click();
-    await page.locator('.new-exercise-form input[type="text"]').fill('Conflict Retry');
-    await page.locator('.new-exercise-form button').filter({ hasText: 'Add' }).click();
+    await page.waitForSelector('.new-exercise-search');
+    await page.locator('.new-exercise-search').fill('Conflict Retry');
+    await page.locator('.new-exercise-custom').click();
 
     // Conflict-recovery path: PUT (409) → GET (refetch sha) → PUT (200)
     await expect.poll(() => putCount, { timeout: 8000 }).toBeGreaterThanOrEqual(2);

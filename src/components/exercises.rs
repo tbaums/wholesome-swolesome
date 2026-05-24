@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
 use crate::app::AppState;
-use crate::models::{Exercise, ExerciseCategory, ExerciseEntry, SetLog};
+use crate::models::{Exercise, ExerciseCategory, ExerciseEntry, LibraryExercise, SetLog};
 
 // ── Freeform upsert helper ────────────────────────────────────────────────────
 
@@ -100,35 +100,64 @@ pub fn ExercisesView() -> impl IntoView {
         names
     });
 
-    let show_form: RwSignal<bool> = RwSignal::new(false);
-    let new_name: RwSignal<String> = RwSignal::new(String::new());
-    let new_sets: RwSignal<u32> = RwSignal::new(3);
-    let new_reps_min: RwSignal<u32> = RwSignal::new(8);
-    let new_reps_max: RwSignal<u32> = RwSignal::new(12);
+    let show_picker: RwSignal<bool> = RwSignal::new(false);
+    let query: RwSignal<String> = RwSignal::new(String::new());
 
-    let save_exercise = move |_| {
-        let name = new_name.get().trim().to_string();
-        if name.is_empty() { return; }
-        state.custom_exercises.update(|v| v.push(Exercise {
-            id: uuid::Uuid::new_v4().to_string(),
-            name: name.clone(),
-            target_sets: new_sets.get(),
-            reps_min: new_reps_min.get(),
-            reps_max: new_reps_max.get(),
-            category: ExerciseCategory::Main,
-            notes: None,
-        }));
-        exercise_names.update(|v| v.push(name));
-        new_name.set(String::new());
-        new_sets.set(3);
-        new_reps_min.set(8);
-        new_reps_max.set(12);
-        show_form.set(false);
+    // Add an exercise (from library or custom) to the freeform list and open its
+    // accordion so the user can immediately log sets. The exercise is saved into
+    // `custom_exercises` so it persists across reloads with its preferred id —
+    // for library picks that id is the library id, which is what the heatmap
+    // matches on.
+    let add_exercise = move |name: String, id: String, target_sets: u32, reps_min: u32, reps_max: u32| {
+        let name_for_lookup = name.clone();
+        let already_saved = state.custom_exercises.with_untracked(|v| {
+            v.iter().any(|e| e.name == name_for_lookup)
+        });
+        if !already_saved {
+            state.custom_exercises.update(|v| v.push(Exercise {
+                id,
+                name: name.clone(),
+                target_sets,
+                reps_min,
+                reps_max,
+                category: ExerciseCategory::Main,
+                notes: None,
+            }));
+        }
+        exercise_names.update(|v| {
+            if !v.iter().any(|n| n == &name) {
+                v.insert(0, name.clone());
+            }
+        });
+        open_ex.set(Some(name));
+        query.set(String::new());
+        show_picker.set(false);
+    };
+
+    let filtered_library = move || -> Vec<LibraryExercise> {
+        let lib = state.library.get();
+        let q = query.get().trim().to_lowercase();
+        if q.is_empty() {
+            lib.into_iter().take(40).collect()
+        } else {
+            let mut starts: Vec<LibraryExercise> = Vec::new();
+            let mut contains: Vec<LibraryExercise> = Vec::new();
+            for e in lib {
+                let n = e.name.to_lowercase();
+                if n.starts_with(&q) {
+                    starts.push(e);
+                } else if n.contains(&q) {
+                    contains.push(e);
+                }
+                if starts.len() + contains.len() >= 80 { break; }
+            }
+            starts.into_iter().chain(contains.into_iter()).take(40).collect()
+        }
     };
 
     let cancel = move |_| {
-        new_name.set(String::new());
-        show_form.set(false);
+        query.set(String::new());
+        show_picker.set(false);
     };
 
     view! {
@@ -144,70 +173,81 @@ pub fn ExercisesView() -> impl IntoView {
                 }
             />
 
-            {move || if show_form.get() {
+            {move || if show_picker.get() {
                 view! {
                     <div class="new-exercise-form card" style="margin-top:12px">
-                        <div class="form-group">
-                            <label>"Exercise name"</label>
-                            <input
-                                type="text"
-                                placeholder="Exercise name"
-                                class="form-input"
-                                prop:value=move || new_name.get()
-                                on:input=move |e| new_name.set(event_target_value(&e))
+                        <input
+                            type="text"
+                            placeholder="Filter exercises…"
+                            class="new-exercise-search"
+                            autofocus
+                            prop:value=move || query.get()
+                            on:input=move |e| query.set(event_target_value(&e))
+                        />
+                        <div class="new-exercise-results">
+                            <For
+                                each=filtered_library
+                                key=|e| e.id.clone()
+                                children=move |e| {
+                                    let name = e.name.clone();
+                                    let id = e.id.clone();
+                                    let (s, mn, mx) = defaults_for_category(&e.category);
+                                    let primary = e.primary_muscles
+                                        .first()
+                                        .map(|m| crate::models::muscle_label(m).to_string())
+                                        .unwrap_or_default();
+                                    let equip = e.equipment.clone().unwrap_or_default();
+                                    let meta = match (primary.is_empty(), equip.is_empty()) {
+                                        (true, true) => String::new(),
+                                        (true, false) => equip,
+                                        (false, true) => primary,
+                                        (false, false) => format!("{} · {}", primary, equip),
+                                    };
+                                    let on_click = move |_| {
+                                        add_exercise(name.clone(), id.clone(), s, mn, mx);
+                                    };
+                                    view! {
+                                        <div class="library-item new-exercise-result" on:click=on_click>
+                                            <div>
+                                                <div class="library-item-name">{e.name.clone()}</div>
+                                                <div class="library-item-meta">{meta}</div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
                             />
+                            {move || {
+                                let q = query.get().trim().to_string();
+                                if q.is_empty() { return ().into_any(); }
+                                let lib = state.library.get();
+                                let q_lc = q.to_lowercase();
+                                if lib.iter().any(|e| e.name.to_lowercase() == q_lc) {
+                                    return ().into_any();
+                                }
+                                let label = q.clone();
+                                let on_click = move |_| {
+                                    let id = uuid::Uuid::new_v4().to_string();
+                                    add_exercise(q.clone(), id, 3, 8, 12);
+                                };
+                                view! {
+                                    <div class="library-item new-exercise-custom" on:click=on_click>
+                                        <div>
+                                            <div class="library-item-name">
+                                                {format!("+ Use \"{}\" as custom", label)}
+                                            </div>
+                                            <div class="library-item-meta">
+                                                "Not in library — won't color the heatmap"
+                                            </div>
+                                        </div>
+                                    </div>
+                                }.into_any()
+                            }}
                         </div>
-                        <div style="display:flex; gap:8px; margin-top:8px">
-                            <div class="form-group" style="flex:1">
-                                <label>"Sets"</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    class="form-input"
-                                    prop:value=move || new_sets.get().to_string()
-                                    on:change=move |e| {
-                                        new_sets.set(event_target_value(&e).parse().unwrap_or(3));
-                                    }
-                                />
-                            </div>
-                            <div class="form-group" style="flex:1">
-                                <label>"Reps min"</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    class="form-input"
-                                    prop:value=move || new_reps_min.get().to_string()
-                                    on:change=move |e| {
-                                        new_reps_min.set(event_target_value(&e).parse().unwrap_or(8));
-                                    }
-                                />
-                            </div>
-                            <div class="form-group" style="flex:1">
-                                <label>"Reps max"</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    class="form-input"
-                                    prop:value=move || new_reps_max.get().to_string()
-                                    on:change=move |e| {
-                                        new_reps_max.set(event_target_value(&e).parse().unwrap_or(12));
-                                    }
-                                />
-                            </div>
-                        </div>
-                        <div style="display:flex; gap:8px; margin-top:12px">
-                            <button
-                                class="btn btn-primary"
-                                style="flex:1"
-                                disabled=move || new_name.get().trim().is_empty()
-                                on:click=save_exercise
-                            >"Add"</button>
-                            <button
-                                class="btn btn-secondary"
-                                style="flex:1"
-                                on:click=cancel
-                            >"Cancel"</button>
-                        </div>
+                        <button
+                            class="btn btn-secondary btn-full"
+                            style="margin-top:8px"
+                            on:click=cancel
+                        >"Cancel"</button>
                     </div>
                 }.into_any()
             } else {
@@ -215,11 +255,18 @@ pub fn ExercisesView() -> impl IntoView {
                     <button
                         class="btn btn-secondary btn-full new-exercise-btn"
                         style="margin-top:12px"
-                        on:click=move |_| show_form.set(true)
+                        on:click=move |_| show_picker.set(true)
                     >"+ New Exercise"</button>
                 }.into_any()
             }}
         </div>
+    }
+}
+
+fn defaults_for_category(category: &str) -> (u32, u32, u32) {
+    match category {
+        "cardio" | "stretching" => (1, 1, 1),
+        _ => (3, 8, 12),
     }
 }
 
