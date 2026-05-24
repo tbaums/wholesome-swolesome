@@ -151,7 +151,14 @@ pub fn SessionDetailView(session_id: String) -> impl IntoView {
                     let completed = sets.iter().filter(|s| s.completed).count();
                     let total = sets.len();
                     let exercise_name = e.exercise_name.clone();
+                    let exercise_id = e.exercise_id.clone();
                     let delete_entry = delete_entry.clone();
+                    let is_cardio = crate::library::is_cardio_exercise(
+                        &exercise_id,
+                        &exercise_name,
+                        &state.library.get(),
+                    );
+                    let (col1, col2) = if is_cardio { ("Min", "Intensity") } else { ("Weight", "Reps") };
                     view! {
                         <div>
                             <div class="card" style="margin-bottom:12px">
@@ -162,8 +169,8 @@ pub fn SessionDetailView(session_id: String) -> impl IntoView {
                                     <thead>
                                         <tr>
                                             <th>"Set"</th>
-                                            <th>"Weight"</th>
-                                            <th>"Reps"</th>
+                                            <th>{col1}</th>
+                                            <th>{col2}</th>
                                             <th>"Done"</th>
                                         </tr>
                                     </thead>
@@ -171,13 +178,20 @@ pub fn SessionDetailView(session_id: String) -> impl IntoView {
                                         <For
                                             each=move || sets.clone()
                                             key=|s| s.set_number
-                                            children=|set| view! {
-                                                <tr>
-                                                    <td>{set.set_number}</td>
-                                                    <td>{format!("{:.1}", set.weight)}</td>
-                                                    <td>{set.reps}</td>
-                                                    <td>{if set.completed { "✓" } else { "—" }}</td>
-                                                </tr>
+                                            children=move |set| {
+                                                let (v1, v2) = if is_cardio {
+                                                    (set.reps.to_string(), format!("{:.0}", set.weight))
+                                                } else {
+                                                    (format!("{:.1}", set.weight), set.reps.to_string())
+                                                };
+                                                view! {
+                                                    <tr>
+                                                        <td>{set.set_number}</td>
+                                                        <td>{v1}</td>
+                                                        <td>{v2}</td>
+                                                        <td>{if set.completed { "✓" } else { "—" }}</td>
+                                                    </tr>
+                                                }
                                             }
                                         />
                                     </tbody>

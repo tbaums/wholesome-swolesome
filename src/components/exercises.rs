@@ -265,7 +265,9 @@ pub fn ExercisesView() -> impl IntoView {
 
 fn defaults_for_category(category: &str) -> (u32, u32, u32) {
     match category {
-        "cardio" | "stretching" => (1, 1, 1),
+        // Cardio: one block, default 20 minutes (stored in reps_min/max).
+        "cardio" => (1, 20, 20),
+        "stretching" => (1, 1, 1),
         _ => (3, 8, 12),
     }
 }
@@ -302,7 +304,26 @@ fn ExerciseFreeformCard(
         }))
         .unwrap_or_else(|| (String::new(), 3, 8, 12));
 
-    let meta = format!("{} sets × {}–{} reps", target_sets, reps_min, reps_max);
+    let is_cardio = {
+        let exercise_id = exercise_id.clone();
+        let exercise_name = exercise_name.clone();
+        move || crate::library::is_cardio_exercise(
+            &exercise_id,
+            &exercise_name,
+            &state.library.get(),
+        )
+    };
+
+    let meta = {
+        let is_cardio = is_cardio.clone();
+        move || {
+            if is_cardio() {
+                format!("{} min", reps_min)
+            } else {
+                format!("{} sets × {}–{} reps", target_sets, reps_min, reps_max)
+            }
+        }
+    };
 
     let is_expanded = {
         let exercise_name = exercise_name.clone();
@@ -595,33 +616,97 @@ fn FreeformSetRow(
         if r == 0 { String::new() } else { r.to_string() }
     };
 
+    let is_cardio = {
+        let exercise_id = exercise_id.clone();
+        let exercise_name = exercise_name.clone();
+        move || crate::library::is_cardio_exercise(
+            &exercise_id,
+            &exercise_name,
+            &state.library.get(),
+        )
+    };
+
     let is_done2 = is_done.clone();
+    let is_cardio_sep = is_cardio.clone();
 
     view! {
         <div class="set-row" class:set-done=is_done>
             <span class="set-num">"Set " {set_idx + 1}</span>
             <div class="set-inputs">
-                <input
-                    type="number"
-                    inputmode="decimal"
-                    step="2.5"
-                    min="0"
-                    class="set-num-input"
-                    placeholder="wt"
-                    prop:value=weight_str
-                    on:change=on_weight_change
-                />
-                <span class="set-x">"×"</span>
-                <input
-                    type="number"
-                    inputmode="numeric"
-                    step="1"
-                    min="0"
-                    class="set-num-input"
-                    placeholder="reps"
-                    prop:value=reps_str
-                    on:change=on_reps_change
-                />
+                {
+                    let is_cardio = is_cardio.clone();
+                    let weight_str = weight_str.clone();
+                    let reps_str = reps_str.clone();
+                    let on_weight_change = on_weight_change.clone();
+                    let on_reps_change = on_reps_change.clone();
+                    move || if is_cardio() {
+                        let reps_str = reps_str.clone();
+                        let on_reps_change = on_reps_change.clone();
+                        view! {
+                            <input
+                                type="number"
+                                inputmode="numeric"
+                                step="1"
+                                min="0"
+                                class="set-num-input"
+                                placeholder="min"
+                                prop:value=reps_str
+                                on:change=on_reps_change
+                            />
+                        }.into_any()
+                    } else {
+                        let weight_str = weight_str.clone();
+                        let on_weight_change = on_weight_change.clone();
+                        view! {
+                            <input
+                                type="number"
+                                inputmode="decimal"
+                                step="2.5"
+                                min="0"
+                                class="set-num-input"
+                                placeholder="wt"
+                                prop:value=weight_str
+                                on:change=on_weight_change
+                            />
+                        }.into_any()
+                    }
+                }
+                <span class="set-x">{move || if is_cardio_sep() { "@" } else { "×" }}</span>
+                {
+                    let is_cardio = is_cardio.clone();
+                    move || if is_cardio() {
+                        let weight_str = weight_str.clone();
+                        let on_weight_change = on_weight_change.clone();
+                        view! {
+                            <input
+                                type="number"
+                                inputmode="numeric"
+                                step="1"
+                                min="1"
+                                max="10"
+                                class="set-num-input"
+                                placeholder="RPE"
+                                prop:value=weight_str
+                                on:change=on_weight_change
+                            />
+                        }.into_any()
+                    } else {
+                        let reps_str = reps_str.clone();
+                        let on_reps_change = on_reps_change.clone();
+                        view! {
+                            <input
+                                type="number"
+                                inputmode="numeric"
+                                step="1"
+                                min="0"
+                                class="set-num-input"
+                                placeholder="reps"
+                                prop:value=reps_str
+                                on:change=on_reps_change
+                            />
+                        }.into_any()
+                    }
+                }
             </div>
             <button
                 class="set-done-btn"

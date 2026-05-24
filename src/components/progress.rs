@@ -33,15 +33,47 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
         }
     };
 
-    // Best set ever (max weight among completed sets)
-    // Clone rows so `best` and the reactive render section each get their own copy.
-    let rows_for_best = rows.clone();
-    let best = move || {
-        rows_for_best().iter()
-            .filter(|(_, _, _, _, done)| *done)
-            .max_by(|a, b| a.3.partial_cmp(&b.3).unwrap())
-            .map(|(date, _, reps, weight, _)| format!("{:.1} × {} reps on {}", weight, reps, date))
+    let is_cardio = {
+        let exercise_name = exercise_name.clone();
+        move || {
+            let history = state.history.get();
+            let exercise_id = history.iter()
+                .find(|e| e.exercise_name == exercise_name)
+                .map(|e| e.exercise_id.clone())
+                .unwrap_or_default();
+            crate::library::is_cardio_exercise(
+                &exercise_id,
+                &exercise_name,
+                &state.library.get(),
+            )
+        }
     };
+
+    // Best set ever:
+    //   strength → max weight among completed sets ("100 × 5 reps on …")
+    //   cardio   → max minutes among completed sets ("30 min @ RPE 6 on …")
+    let rows_for_best = rows.clone();
+    let is_cardio_for_best = is_cardio.clone();
+    let best = move || {
+        let cardio = is_cardio_for_best();
+        let data = rows_for_best();
+        let completed = data.iter().filter(|(_, _, _, _, done)| *done);
+        if cardio {
+            completed
+                .max_by_key(|r| r.2)  // r.2 = reps = minutes
+                .map(|(date, _, reps, weight, _)| {
+                    format!("{} min @ RPE {:.0} on {}", reps, weight, date)
+                })
+        } else {
+            completed
+                .max_by(|a, b| a.3.partial_cmp(&b.3).unwrap())
+                .map(|(date, _, reps, weight, _)| {
+                    format!("{:.1} × {} reps on {}", weight, reps, date)
+                })
+        }
+    };
+
+    let is_cardio_for_table = is_cardio.clone();
 
     view! {
         <div class="page">
@@ -72,16 +104,17 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
                         </div>
                     }.into_any()
                 } else {
-                    // Clone so the outer Fn closure isn't consumed by the inner move ||
                     let rows2 = rows.clone();
+                    let cardio = is_cardio_for_table();
+                    let (col1, col2) = if cardio { ("Min", "Intensity") } else { ("Weight", "Reps") };
                     view! {
                         <div class="card">
                             <table class="progress-table" style="width:100%">
                                 <thead>
                                     <tr>
                                         <th>"Date"</th>
-                                        <th>"Weight"</th>
-                                        <th>"Reps"</th>
+                                        <th>{col1}</th>
+                                        <th>{col2}</th>
                                         <th>"Done"</th>
                                     </tr>
                                 </thead>
@@ -89,15 +122,22 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
                                     <For
                                         each=rows2
                                         key=|r| format!("{}{}{}{:.1}", r.0, r.2, r.3, r.4)
-                                        children=|(date, _day, reps, weight, done)| view! {
-                                            <tr>
-                                                <td class="text-sm">{date}</td>
-                                                <td>{format!("{:.1}", weight)}</td>
-                                                <td>{reps}</td>
-                                                <td style={if done { "color:var(--success)" } else { "color:var(--text-muted)" }}>
-                                                    {if done { "✓" } else { "—" }}
-                                                </td>
-                                            </tr>
+                                        children=move |(date, _day, reps, weight, done)| {
+                                            let (v1, v2) = if cardio {
+                                                (reps.to_string(), format!("{:.0}", weight))
+                                            } else {
+                                                (format!("{:.1}", weight), reps.to_string())
+                                            };
+                                            view! {
+                                                <tr>
+                                                    <td class="text-sm">{date}</td>
+                                                    <td>{v1}</td>
+                                                    <td>{v2}</td>
+                                                    <td style={if done { "color:var(--success)" } else { "color:var(--text-muted)" }}>
+                                                        {if done { "✓" } else { "—" }}
+                                                    </td>
+                                                </tr>
+                                            }
                                         }
                                     />
                                 </tbody>

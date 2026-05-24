@@ -82,6 +82,32 @@ pub fn recency_bucket(days_since: i64) -> Option<RecencyBucket> {
     }
 }
 
+// ── Category lookup ──────────────────────────────────────────────────────────
+
+/// Looks an exercise up in the library by id first, then by case-insensitive
+/// name, and returns its category string (e.g. `"cardio"`, `"strength"`).
+pub fn category_of<'a>(
+    exercise_id: &str,
+    exercise_name: &str,
+    library: &'a [LibraryExercise],
+) -> Option<&'a str> {
+    let name_lc = exercise_name.to_lowercase();
+    library
+        .iter()
+        .find(|e| e.id == exercise_id || e.name.to_lowercase() == name_lc)
+        .map(|e| e.category.as_str())
+}
+
+/// True if the named exercise is in the library with `category == "cardio"`.
+/// Used to switch the set-input UI to minutes × intensity instead of weight × reps.
+pub fn is_cardio_exercise(
+    exercise_id: &str,
+    exercise_name: &str,
+    library: &[LibraryExercise],
+) -> bool {
+    category_of(exercise_id, exercise_name, library) == Some("cardio")
+}
+
 // ── Muscle aggregation from history ──────────────────────────────────────────
 
 /// For each free-exercise-db muscle key, the most recent date (YYYY-MM-DD)
