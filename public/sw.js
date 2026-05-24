@@ -1,4 +1,4 @@
-const CACHE = "swolesome-v9";
+const CACHE = "swolesome-v10";
 
 const PRECACHE = [
   "./",
@@ -24,6 +24,10 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const { request } = e;
   const url = new URL(request.url);
+
+  // Never intercept cross-origin requests (sync to api.github.com etc).
+  // The catch-all cache-first branch below would otherwise poison sync.
+  if (url.origin !== self.location.origin) return;
 
   // Navigation: network-first, cache fallback for offline.
   if (request.mode === "navigate") {
