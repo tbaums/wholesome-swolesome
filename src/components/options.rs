@@ -459,7 +459,14 @@ fn GoalsEditor() -> impl IntoView {
 pub fn CoachPacketView() -> impl IntoView {
     let state = expect_context::<AppState>();
 
-    let target_date = RwSignal::new(tomorrow());
+    let today = current_date();
+    let has_today = state
+        .scheduled_workouts
+        .get_untracked()
+        .iter()
+        .any(|w| w.date == today);
+    let default_date = if has_today { tomorrow() } else { today };
+    let target_date = RwSignal::new(default_date);
     let packet = move || {
         let goals = state.goals.get();
         let history = state.history.get();
