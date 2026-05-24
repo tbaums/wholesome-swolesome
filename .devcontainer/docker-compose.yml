@@ -40,12 +40,18 @@ services:
 
       # Persist Rust build state across container runs without polluting
       # the host's macOS target/ dir (different triple — would conflict).
+      # target-cache lives at /home/node/target (not /workspace/target) so
+      # the named volume inherits node ownership from the image; mounting
+      # under the bind-mounted /workspace masks any pre-set perms and
+      # leaves the fresh volume root-owned + unwriteable to `node`.
       - cargo-registry:/home/node/.cargo/registry
       - cargo-git:/home/node/.cargo/git
-      - target-cache:/workspace/target
+      - target-cache:/home/node/target
     # Bind trunk serve to all interfaces so the host can reach :8080.
+    # CARGO_TARGET_DIR routes builds into the relocated target-cache volume.
     environment:
       - TRUNK_SERVE_ADDRESS=0.0.0.0
+      - CARGO_TARGET_DIR=/home/node/target
     # No `command:` — image CMD is `sleep infinity` so the container idles
     # in the background and we attach via `docker compose exec`.
 

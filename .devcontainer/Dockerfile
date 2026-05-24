@@ -39,6 +39,12 @@ RUN npm install -g @anthropic-ai/claude-code
 # nested `.credentials.json` bind mount has a valid parent.
 RUN install -d -o node -g node -m 0700 /home/node/.claude
 
+# Same trick for the cargo target dir: a named volume mounts here, and
+# Docker's volume-init copies this path's ownership into the fresh volume.
+# Mounting under /home/node (not /workspace/target) sidesteps the
+# bind-mounted /workspace, which otherwise masks any pre-created perms.
+RUN install -d -o node -g node -m 0755 /home/node/target
+
 # Login shells on Debian (`bash -l`, `bash --login`) run /etc/profile, which
 # re-sets PATH from /etc/login.defs and clobbers the image's ENV PATH. Drop
 # a profile.d snippet so cargo bins and ~/.local/bin survive a login shell.
