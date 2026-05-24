@@ -635,9 +635,13 @@
       gap: 8px;
     }
     .body-svg {
+      /* viewBox is 200x440 — pin the CSS box to the same 1:2.2 ratio so
+         the lower body (calves/feet at y≈430) isn't clipped. Letting
+         `height: auto` derive from intrinsic SVG ratio is unreliable
+         across browsers; aspect-ratio makes it explicit. */
       width: 48%;
+      aspect-ratio: 200 / 440;
       height: auto;
-      max-height: 320px;
       display: block;
     }
     .heatmap-legend {
