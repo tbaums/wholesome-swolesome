@@ -1,3 +1,4 @@
+pub mod coach;
 pub mod csv_utils;
 pub mod library;
 pub mod models;
@@ -233,6 +234,137 @@ mod tests {
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].primary_muscles, vec!["abdominals"]);
         assert_eq!(parsed[0].equipment.as_deref(), Some("other"));
+    }
+
+    // ── Coach: library-id validation ─────────────────────────────────────────
+
+    fn lib_entry(id: &str, name: &str) -> crate::models::LibraryExercise {
+        crate::models::LibraryExercise {
+            id: id.into(),
+            name: name.into(),
+            force: None,
+            level: "intermediate".into(),
+            mechanic: None,
+            equipment: Some("barbell".into()),
+            primary_muscles: vec!["chest".into()],
+            secondary_muscles: vec!["triceps".into()],
+            instructions: vec![],
+            category: "strength".into(),
+            images: vec![],
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_workout_accepts_known_library_id() {
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let json = r#"{
+            "name": "Push",
+            "rationale": "Chest fresh.",
+            "exercises": [
+                {"library_id":"Barbell_Bench_Press_-_Medium_Grip","name":"Bench Press",
+                 "target_sets":4,"reps_min":6,"reps_max":8,"rest_seconds":180,"notes":null}
+            ]
+        }"#;
+        let w = crate::coach::parse_workout_response(json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib)
+            .expect("valid id should pass");
+        assert_eq!(w.exercises.len(), 1);
+        assert_eq!(
+            w.exercises[0].library_id.as_deref(),
+            Some("Barbell_Bench_Press_-_Medium_Grip")
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_workout_rejects_unknown_library_id() {
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let json = r#"{
+            "name": "Push",
+            "exercises": [
+                {"library_id":"Made_Up_Lift","name":"Bench-ish Press",
+                 "target_sets":4,"reps_min":6,"reps_max":8,"rest_seconds":180,"notes":null}
+            ]
+        }"#;
+        let err = crate::coach::parse_workout_response(
+            json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib,
+        )
+        .expect_err("invalid id should fail");
+        assert!(err.contains("Made_Up_Lift"), "error should name the offender: {err}");
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_workout_rejects_missing_library_id() {
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let json = r#"{
+            "name": "Push",
+            "exercises": [
+                {"library_id":null,"name":"Freeform Bench",
+                 "target_sets":4,"reps_min":6,"reps_max":8,"rest_seconds":180,"notes":null}
+            ]
+        }"#;
+        let err = crate::coach::parse_workout_response(
+            json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib,
+        )
+        .expect_err("missing id should fail");
+        assert!(err.contains("Freeform Bench"), "error should name the offender: {err}");
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_workout_rejects_blank_library_id() {
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let json = r#"{
+            "name": "Push",
+            "exercises": [
+                {"library_id":"  ","name":"Whitespace ID",
+                 "target_sets":4,"reps_min":6,"reps_max":8,"rest_seconds":180,"notes":null}
+            ]
+        }"#;
+        let err = crate::coach::parse_workout_response(
+            json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib,
+        )
+        .expect_err("blank id should fail");
+        assert!(err.contains("Whitespace ID"), "error should name the offender: {err}");
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_workout_bails_when_library_empty() {
+        // Library hasn't loaded yet → don't silently accept anything.
+        let lib: Vec<crate::models::LibraryExercise> = vec![];
+        let json = r#"{
+            "name": "Push",
+            "exercises": [
+                {"library_id":"Barbell_Bench_Press_-_Medium_Grip","name":"Bench Press",
+                 "target_sets":4,"reps_min":6,"reps_max":8,"rest_seconds":180,"notes":null}
+            ]
+        }"#;
+        let err = crate::coach::parse_workout_response(
+            json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib,
+        )
+        .expect_err("empty library should bail");
+        assert!(err.to_lowercase().contains("library"), "error should mention library: {err}");
+    }
+
+    #[wasm_bindgen_test]
+    fn coach_packet_inlines_library_ids() {
+        use crate::coach::{build_coach_packet, PacketInput};
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let goals = UserGoals::default();
+        let packet = build_coach_packet(PacketInput {
+            goals: &goals,
+            history: &[],
+            library: &lib,
+            scheduled: &[],
+            today: "2026-05-24",
+            target_date: "2026-05-25",
+        });
+        // The off-app Claude needs the IDs directly in the brief.
+        assert!(
+            packet.contains("Barbell_Bench_Press_-_Medium_Grip"),
+            "packet should inline library ids"
+        );
+        assert!(
+            packet.to_lowercase().contains("library_id"),
+            "packet should reference library_id field"
+        );
     }
 
     // ── Recency bucket ───────────────────────────────────────────────────────

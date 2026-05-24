@@ -509,7 +509,8 @@ pub fn CoachPacketView() -> impl IntoView {
         }
         let target = target_date();
         let created = current_datetime();
-        match parse_workout_response(&text, &target, &created) {
+        let library = state.library.get_untracked();
+        match parse_workout_response(&text, &target, &created, &library) {
             Ok(workout) => {
                 let label = workout.name.clone();
                 state.scheduled_workouts.update(|v| {

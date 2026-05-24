@@ -135,9 +135,12 @@ Build a `ScheduledWorkout` JSON object:
 }
 ```
 
-`library_id` MUST match a real `id` from `exercises.json`. If you can't find a perfect
-match for a movement you want to prescribe, pick the closest existing library entry
-rather than inventing an id.
+`library_id` is **required** for every exercise and MUST exactly match an `id` from
+`exercises.json` — verbatim, case-sensitive, including underscores and punctuation.
+If you can't find a perfect match for a movement you want to prescribe, pick the
+closest existing library entry rather than inventing an id. The pusher validates
+every id against `exercises.json` and aborts the run if any don't match, so
+freeform names are guaranteed to fail. `name` should match the library entry's `name`.
 
 ## Step 6 — Merge and push
 

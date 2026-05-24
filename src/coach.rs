@@ -1,7 +1,7 @@
 //! Generates the "coach packet" markdown that gets fed to Claude, and parses
 //! the JSON workout it returns.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::library::{days_between, last_hit_by_muscle, recency_bucket, RecencyBucket};
 use crate::models::{
@@ -126,23 +126,26 @@ pub fn build_coach_packet(input: PacketInput<'_>) -> String {
         out.push('\n');
     }
 
-    // ── Library reference ───────────────────────────────────────────────────
-    out.push_str("## Exercise library\n\n");
+    // ── Library listing (inline so the off-app Claude knows what's available) ─
+    out.push_str("## Exercise library — the ONLY valid sources of exercises\n\n");
     out.push_str(&format!(
-        "The full library ({} exercises) is at `public/data/exercises.json` in the wholesome-swolesome repo, or live at <https://tbaums.github.io/wholesome-swolesome/data/exercises.json>. Each entry has `id`, `name`, `primaryMuscles`, `secondaryMuscles`, `equipment`, `category`, `level`, `mechanic`, `instructions`, and `images`.\n\n",
+        "The app stores every exercise as an `id` from this list. Every exercise in your response **MUST** use a `library_id` taken verbatim from the `id` column below — the importer rejects anything else. Do not invent ids, do not lowercase or rewrite them. {} entries:\n\n",
         input.library.len()
     ));
+    out.push_str(&render_library_listing(input.library));
+    out.push('\n');
 
     // ── Instructions ────────────────────────────────────────────────────────
     out.push_str(
         r#"## Task
 
 Design ONE workout for the target date. Apply:
+- **Library-only** — every exercise must have a `library_id` copied verbatim from the table above. If the lift you want isn't in the table, pick the closest entry that IS rather than inventing one. No freeform names.
 - **Progressive overload** — if the user hit the top of their rep range on an exercise recently with good completion, bump weight ~2.5% (or one notch). If they missed reps, hold weight.
 - **Recovery science** — avoid muscles worked in the last 48h for high-intensity work; touch them only with low-volume accessory work if at all. Prioritize muscles in the "8-14 days" / "never" buckets.
 - **Movement balance** — across a week, balance push/pull, knee-dominant / hip-dominant, vertical / horizontal.
 - **Volume** — match `session_minutes`. Plan ~10-25 working sets total. Include rest_seconds appropriate for the goal (60-90s for hypertrophy, 180-300s for strength).
-- **Equipment** — only prescribe exercises whose `equipment` is in the user's available list.
+- **Equipment** — only prescribe exercises whose `equipment` is in the user's available list (empty list = full commercial gym, all equipment OK).
 
 ## Response format
 
@@ -166,10 +169,40 @@ Reply with **ONLY** this JSON, nothing else (no markdown fence, no commentary):
 }
 ```
 
-`library_id` must match a real exercise id from the library. `notes` can be null. Order exercises in the sequence they should be performed.
+`library_id` is **required** for every exercise and must exactly match an `id` from the table above. `name` should match the library `name` for consistency. `notes` can be null. Order exercises in the sequence they should be performed.
 "#,
     );
 
+    out
+}
+
+/// Compact pipe-delimited listing the off-app Claude can scan to pick valid IDs.
+/// Columns: id | name | equipment | category | primary | secondary.
+pub fn render_library_listing(library: &[LibraryExercise]) -> String {
+    let mut sorted: Vec<&LibraryExercise> = library.iter().collect();
+    sorted.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    let mut out = String::new();
+    out.push_str("```\n");
+    out.push_str("id | name | equipment | category | primary | secondary\n");
+    for ex in sorted {
+        let equipment = ex.equipment.as_deref().unwrap_or("-");
+        let primary = if ex.primary_muscles.is_empty() {
+            "-".to_string()
+        } else {
+            ex.primary_muscles.join(",")
+        };
+        let secondary = if ex.secondary_muscles.is_empty() {
+            "-".to_string()
+        } else {
+            ex.secondary_muscles.join(",")
+        };
+        out.push_str(&format!(
+            "{} | {} | {} | {} | {} | {}\n",
+            ex.id, ex.name, equipment, ex.category, primary, secondary
+        ));
+    }
+    out.push_str("```\n");
     out
 }
 
@@ -219,7 +252,12 @@ struct CoachResponse {
     exercises: Vec<ScheduledExercise>,
 }
 
-pub fn parse_workout_response(json: &str, target_date: &str, created_at: &str) -> Result<ScheduledWorkout, String> {
+pub fn parse_workout_response(
+    json: &str,
+    target_date: &str,
+    created_at: &str,
+    library: &[LibraryExercise],
+) -> Result<ScheduledWorkout, String> {
     // Strip ```json fences if present.
     let trimmed = json.trim();
     let body = if let Some(rest) = trimmed.strip_prefix("```json") {
@@ -241,6 +279,7 @@ pub fn parse_workout_response(json: &str, target_date: &str, created_at: &str) -
     if resp.exercises.is_empty() {
         return Err("Response had zero exercises".into());
     }
+    validate_exercises_against_library(&resp.exercises, library)?;
     Ok(ScheduledWorkout {
         id: uuid::Uuid::new_v4().to_string(),
         date: target_date.to_string(),
@@ -250,4 +289,46 @@ pub fn parse_workout_response(json: &str, target_date: &str, created_at: &str) -
         exercises: resp.exercises,
         created_at: created_at.to_string(),
     })
+}
+
+/// Reject any exercise that doesn't carry a `library_id` matching a real library entry.
+/// Returns Ok(()) if every exercise is valid, otherwise an error message listing the offenders.
+pub fn validate_exercises_against_library(
+    exercises: &[ScheduledExercise],
+    library: &[LibraryExercise],
+) -> Result<(), String> {
+    if library.is_empty() {
+        return Err(
+            "Exercise library hasn't loaded yet — can't validate. Try again in a moment.".into(),
+        );
+    }
+    let known: HashSet<&str> = library.iter().map(|e| e.id.as_str()).collect();
+
+    let mut missing_id: Vec<String> = Vec::new();
+    let mut bad_id: Vec<String> = Vec::new();
+    for ex in exercises {
+        match ex.library_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            None => missing_id.push(ex.name.clone()),
+            Some(id) if !known.contains(id) => bad_id.push(format!("{} (id={id})", ex.name)),
+            Some(_) => {}
+        }
+    }
+
+    if missing_id.is_empty() && bad_id.is_empty() {
+        return Ok(());
+    }
+    let mut msg = String::from("Library validation failed — only exercises from the bundled library are allowed.");
+    if !missing_id.is_empty() {
+        msg.push_str(&format!(
+            "\n  • Missing library_id: {}",
+            missing_id.join(", ")
+        ));
+    }
+    if !bad_id.is_empty() {
+        msg.push_str(&format!(
+            "\n  • Unknown library_id: {}",
+            bad_id.join(", ")
+        ));
+    }
+    Err(msg)
 }

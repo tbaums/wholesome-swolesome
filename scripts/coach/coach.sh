@@ -77,6 +77,24 @@ PY
 echo "[coach] parsed workout:"
 jq '.name, .rationale, (.exercises | length)' "$RESPONSE"
 
+# ── Validate every library_id exists in the bundled library ──────────────────
+echo "[coach] validating library_ids against exercises.json..."
+INVALID=$(jq -r --slurpfile lib "$TMP/exercises.json" '
+  ($lib[0] | map(.id)) as $known
+  | .exercises
+  | map(select((.library_id // "") as $id
+               | ($id == "") or (($known | index($id)) == null))
+        | "\(.name) → library_id=\(.library_id // "(missing)")")
+  | .[]
+' "$RESPONSE")
+
+if [ -n "$INVALID" ]; then
+  echo "[coach] ✗ rejected — exercises not in library:" >&2
+  echo "$INVALID" | sed 's/^/  • /' >&2
+  echo "[coach] not pushing. Re-run; if persistent, tighten PROMPT.md." >&2
+  exit 1
+fi
+
 # ── Build ScheduledWorkout, merge, push ──────────────────────────────────────
 NOW=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
 UUID=$(uuidgen | tr 'A-Z' 'a-z')
