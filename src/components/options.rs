@@ -459,21 +459,22 @@ fn GoalsEditor() -> impl IntoView {
 pub fn CoachPacketView() -> impl IntoView {
     let state = expect_context::<AppState>();
 
-    let today = current_date();
-    let has_today = state
-        .scheduled_workouts
-        .get_untracked()
-        .iter()
-        .any(|w| w.date == today);
-    let default_date = if has_today { tomorrow() } else { today };
-    let target_date = RwSignal::new(default_date);
+    let target_date = move || {
+        let today = current_date();
+        let has_today = state
+            .scheduled_workouts
+            .get()
+            .iter()
+            .any(|w| w.date == today);
+        if has_today { tomorrow() } else { today }
+    };
     let packet = move || {
         let goals = state.goals.get();
         let history = state.history.get();
         let library = state.library.get();
         let scheduled = state.scheduled_workouts.get();
         let today = current_date();
-        let target = target_date.get();
+        let target = target_date();
         build_coach_packet(PacketInput {
             goals: &goals,
             history: &history,
@@ -506,7 +507,7 @@ pub fn CoachPacketView() -> impl IntoView {
             import_status.set(Some("Paste Claude's JSON response first.".into()));
             return;
         }
-        let target = target_date.get_untracked();
+        let target = target_date();
         let created = current_datetime();
         match parse_workout_response(&text, &target, &created) {
             Ok(workout) => {
@@ -531,13 +532,9 @@ pub fn CoachPacketView() -> impl IntoView {
             </div>
 
             <div class="card" style="margin-bottom:12px">
-                <label class="text-sm text-muted">"Target workout date"</label>
-                <input
-                    type="date"
-                    class="input"
-                    prop:value=move || target_date.get()
-                    on:change=move |e| target_date.set(event_target_value(&e))
-                />
+                <div class="text-sm text-muted">
+                    "Target workout date: " <span class="fw-600">{target_date}</span>
+                </div>
                 <div class="text-muted text-sm" style="margin-top:8px">
                     "1) Copy this brief → 2) paste into Claude Code (any session) → 3) paste Claude's JSON response below → 4) Import."
                 </div>
