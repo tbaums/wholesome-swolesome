@@ -387,7 +387,7 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                     class="set-num-input"
                     placeholder="wt"
                     prop:value=weight_str
-                    on:change=on_weight_change
+                    on:input=on_weight_change
                 />
                 <span class="set-x">"×"</span>
                 <input
@@ -398,7 +398,7 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                     class="set-num-input"
                     placeholder="reps"
                     prop:value=reps_str
-                    on:change=on_reps_change
+                    on:input=on_reps_change
                 />
             </div>
 

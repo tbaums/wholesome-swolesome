@@ -55,20 +55,27 @@ fn ScheduledCard(workout: ScheduledWorkout, #[prop()] label: &'static str) -> im
     let state = expect_context::<AppState>();
     let w_clone = workout.clone();
     let start = move |_| {
-        let history = state.history.get_untracked();
-        let session = new_session_from_scheduled(&w_clone, &history);
         let workout_id = w_clone.id.clone();
         let existing = state.active_session.get_untracked();
-        if let Some(s) = existing {
-            if s.day_id != workout_id {
-                state.session_drafts.update(|drafts| {
-                    if let Some(pos) = drafts.iter().position(|d| d.day_id == s.day_id) {
-                        drafts[pos] = s;
-                    } else {
-                        drafts.push(s);
-                    }
-                });
+
+        if let Some(ref s) = existing {
+            if s.day_id == workout_id {
+                state.navigate(View::Session { workout_id });
+                return;
             }
+        }
+
+        let history = state.history.get_untracked();
+        let session = new_session_from_scheduled(&w_clone, &history);
+
+        if let Some(s) = existing {
+            state.session_drafts.update(|drafts| {
+                if let Some(pos) = drafts.iter().position(|d| d.day_id == s.day_id) {
+                    drafts[pos] = s;
+                } else {
+                    drafts.push(s);
+                }
+            });
         }
         // Resume from draft if present
         let draft = state
@@ -111,7 +118,14 @@ fn ScheduledCard(workout: ScheduledWorkout, #[prop()] label: &'static str) -> im
                     }
                 }).collect_view()}
             </ul>
-            <button class="btn btn-finish btn-full" on:click=start>"Start workout →"</button>
+            <button class="btn btn-finish btn-full" on:click=start>
+                {move || {
+                    let is_active = state.active_session.get()
+                        .map(|s| s.day_id == workout.id)
+                        .unwrap_or(false);
+                    if is_active { "Resume workout →" } else { "Start workout →" }
+                }}
+            </button>
         </div>
     }
 }
