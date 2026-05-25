@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::app::AppState;
+use crate::app::{AppState, View};
 use crate::models::{Exercise, ExerciseCategory, ExerciseEntry, LibraryExercise, SetLog};
 
 // ── Freeform upsert helper ────────────────────────────────────────────────────
@@ -401,13 +401,26 @@ fn ExerciseFreeformCard(
         }
     };
 
+    let nav_to_detail = {
+        let exercise_id = exercise_id.clone();
+        move |_| {
+            state.navigate(View::LibraryDetail {
+                exercise_id: exercise_id.clone(),
+                from: Some(Box::new(View::Exercises)),
+            });
+        }
+    };
+
     let is_expanded2 = is_expanded.clone();
 
     view! {
         <div class="ex-card">
             <div class="exercise-header">
                 <div>
-                    <div class="card-title">{exercise_name.clone()}</div>
+                    <div style="display:flex; align-items:baseline; gap:6px">
+                        <div class="card-title">{exercise_name.clone()}</div>
+                        <button class="ex-info-btn" on:click=nav_to_detail>"ⓘ"</button>
+                    </div>
                     <div class="exercise-meta">{meta}</div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px">

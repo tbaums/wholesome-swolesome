@@ -161,7 +161,7 @@ fn LibraryItem(ex: LibraryExercise) -> impl IntoView {
     let meta = meta_parts.join(", ");
     let equip = ex.equipment.clone().unwrap_or_default();
 
-    let on_click = move |_| state.navigate(View::LibraryDetail { exercise_id: id.clone() });
+    let on_click = move |_| state.navigate(View::LibraryDetail { exercise_id: id.clone(), from: None });
 
     view! {
         <div class="library-item" on:click=on_click>
@@ -177,9 +177,18 @@ fn LibraryItem(ex: LibraryExercise) -> impl IntoView {
 // ── Detail view ──────────────────────────────────────────────────────────────
 
 #[component]
-pub fn LibraryDetailView(exercise_id: String) -> impl IntoView {
+pub fn LibraryDetailView(
+    exercise_id: String,
+    from: Option<Box<View>>,
+) -> impl IntoView {
     let state = expect_context::<AppState>();
     let id = exercise_id.clone();
+
+    let back_view = from.map(|v| *v).unwrap_or(View::Library);
+    let back_label = match &back_view {
+        View::Library => "‹ Library",
+        _ => "‹ Back",
+    };
 
     let entry = move || -> Option<LibraryExercise> {
         let id = id.clone();
@@ -189,7 +198,7 @@ pub fn LibraryDetailView(exercise_id: String) -> impl IntoView {
     view! {
         <div class="page">
             <div class="page-header">
-                <button class="back-btn" on:click=move |_| state.navigate(View::Library)>"‹ Library"</button>
+                <button class="back-btn" on:click=move |_| state.navigate(back_view.clone())>{back_label}</button>
             </div>
             {move || match entry() {
                 None => view! {

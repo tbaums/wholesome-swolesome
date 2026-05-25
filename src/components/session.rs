@@ -226,6 +226,19 @@ fn ExerciseCard(
         }
     };
 
+    let nav_to_detail = {
+        let ex_id = ex_id.clone();
+        let workout_id = state.active_session.get_untracked()
+            .map(|s| s.day_id.clone())
+            .unwrap_or_default();
+        move |_| {
+            state.navigate(View::LibraryDetail {
+                exercise_id: ex_id.clone(),
+                from: Some(Box::new(View::Session { workout_id: workout_id.clone() })),
+            });
+        }
+    };
+
     let is_complete2 = is_complete.clone();
     let is_expanded2 = is_expanded.clone();
 
@@ -234,7 +247,10 @@ fn ExerciseCard(
             // Header — only the chevron toggles the accordion
             <div class="exercise-header">
                 <div>
-                    <div class="card-title">{ex_name}</div>
+                    <div style="display:flex; align-items:baseline; gap:6px">
+                        <div class="card-title">{ex_name}</div>
+                        <button class="ex-info-btn" on:click=nav_to_detail>"ⓘ"</button>
+                    </div>
                     <div class="exercise-meta">{target_info}</div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px">
