@@ -106,7 +106,7 @@ fn HeatmapLegend() -> impl IntoView {
 
 // ── SVG construction ─────────────────────────────────────────────────────────
 //
-// viewBox 200 x 440 per side. Stylized but anatomically suggestive: head,
+// viewBox 260 x 480 per side (content in 0..200 x 0..440 with padding).
 // neck, torso, arms, legs. Muscle regions are overlaid paths fitted to those
 // shapes. Coordinates are hand-authored — not perfect, but readable on a
 // phone and clearly partition the body into the ~15 muscle zones we track.
@@ -124,7 +124,7 @@ fn render_front(fills: &Fills) -> impl IntoView {
     let outline = "#3d2878";
 
     view! {
-        <svg class="body-svg" attr:viewBox="0 0 200 440" xmlns="http://www.w3.org/2000/svg">
+        <svg class="body-svg" viewBox="-30 -10 260 480" xmlns="http://www.w3.org/2000/svg">
             // ── Silhouette base ─────────────────────────────────────────
             // Head + neck
             <circle cx="100" cy="30" r="22" fill="#2d2050" stroke=outline stroke-width="1.5"/>
@@ -203,7 +203,7 @@ fn render_back(fills: &Fills) -> impl IntoView {
     let outline = "#3d2878";
 
     view! {
-        <svg class="body-svg" attr:viewBox="0 0 200 440" xmlns="http://www.w3.org/2000/svg">
+        <svg class="body-svg" viewBox="-30 -10 260 480" xmlns="http://www.w3.org/2000/svg">
             // Silhouette base (same outline as front)
             <circle cx="100" cy="30" r="22" fill="#2d2050" stroke=outline stroke-width="1.5"/>
             <rect x="92" y="50" width="16" height="10" fill={fill_of(fills, "neck")} stroke=outline stroke-width="1"/>

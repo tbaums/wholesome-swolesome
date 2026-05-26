@@ -618,7 +618,6 @@
       border-radius: var(--radius);
       padding: 12px;
       position: relative;
-      overflow: hidden;
       margin-bottom: 12px;
     }
     .heatmap-wrap::before {
@@ -627,22 +626,19 @@
       top: 0; left: 0; bottom: 0;
       width: 5px;
       background: var(--trans);
+      border-radius: var(--radius) 0 0 var(--radius);
     }
     .heatmap-row {
       display: flex;
-      justify-content: space-around;
-      align-items: flex-end;
-      gap: 8px;
+      justify-content: center;
+      gap: 4px;
     }
     .body-svg {
-      /* viewBox is 200x440 — pin the CSS box to the same 1:2.2 ratio so
-         the lower body (calves/feet at y≈430) isn't clipped. Letting
-         `height: auto` derive from intrinsic SVG ratio is unreliable
-         across browsers; aspect-ratio makes it explicit. */
-      width: 48%;
-      aspect-ratio: 200 / 440;
+      width: 46%;
+      aspect-ratio: 260 / 480;
       height: auto;
       display: block;
+      overflow: visible;
     }
     .heatmap-legend {
       display: flex;
