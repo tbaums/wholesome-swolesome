@@ -355,17 +355,23 @@ pub fn new_session_from_scheduled(
         .exercises
         .iter()
         .map(|ex| {
-            let (default_weight, default_reps) = last_completed_for(history, ex)
-                .map(|s| (s.weight, s.reps))
-                .unwrap_or((0.0, ex.reps_min));
+            let prev_sets = last_completed_sets(history, ex);
 
             let sets = (1..=ex.target_sets)
-                .map(|n| SetLog {
-                    set_number: n,
-                    reps: default_reps,
-                    weight: default_weight,
-                    completed: false,
-                    completed_date: None,
+                .map(|n| {
+                    let (weight, reps) = prev_sets
+                        .iter()
+                        .find(|s| s.set_number == n)
+                        .or_else(|| prev_sets.last())
+                        .map(|s| (s.weight, s.reps))
+                        .unwrap_or((0.0, ex.reps_min));
+                    SetLog {
+                        set_number: n,
+                        reps,
+                        weight,
+                        completed: false,
+                        completed_date: None,
+                    }
                 })
                 .collect();
 
@@ -390,23 +396,21 @@ pub fn new_session_from_scheduled(
     }
 }
 
-fn last_completed_for<'a>(
-    history: &'a [ExerciseEntry],
+fn last_completed_sets(
+    history: &[ExerciseEntry],
     ex: &crate::models::ScheduledExercise,
-) -> Option<&'a SetLog> {
+) -> Vec<SetLog> {
     let name_lc = ex.name.to_lowercase();
-    history
-        .iter()
-        .rev()
-        .filter(|e| {
-            // Match by library_id (stored in exercise_id) when available, else by name.
-            match ex.library_id.as_deref() {
-                Some(id) if !id.is_empty() => e.exercise_id == id,
-                _ => e.exercise_name.to_lowercase() == name_lc,
-            }
-        })
-        .flat_map(|e| e.sets.iter().rev())
-        .find(|s| s.completed)
+    let entry = history.iter().rev().find(|e| {
+        match ex.library_id.as_deref() {
+            Some(id) if !id.is_empty() => e.exercise_id == id,
+            _ => e.exercise_name.to_lowercase() == name_lc,
+        }
+    });
+    match entry {
+        Some(e) => e.sets.iter().filter(|s| s.completed).cloned().collect(),
+        None => Vec::new(),
+    }
 }
 
 pub fn current_date() -> String {
