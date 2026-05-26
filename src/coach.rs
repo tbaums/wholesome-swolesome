@@ -212,8 +212,9 @@ fn recent_history<'a>(history: &'a [ExerciseEntry], today: &str, window: i64) ->
     history
         .iter()
         .filter(|e| {
-            let d = days_between(&e.date, today).unwrap_or(9999);
-            (0..=window).contains(&d)
+            e.finalized
+                && e.sets.iter().any(|s| s.completed)
+                && (0..=window).contains(&days_between(&e.date, today).unwrap_or(9999))
         })
         .collect()
 }
