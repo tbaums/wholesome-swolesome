@@ -110,6 +110,7 @@ mod tests {
                 reps_max: 8,
                 rest_seconds: 180,
                 notes: Some("RPE 7".into()),
+                target_duration_seconds: None,
             }],
             created_at: "2026-05-22T23:00:00.000Z".into(),
         });
@@ -137,6 +138,7 @@ mod tests {
             reps_max: 12,
             finalized: false,
             sets: vec![],
+            target_duration_seconds: None,
         };
 
         let mut state = empty_state("2026-05-22T10:00:00.000Z");
@@ -438,12 +440,14 @@ mod tests {
             reps_min: 8,
             reps_max: 12,
             finalized: true,
+            target_duration_seconds: None,
             sets: vec![SetLog {
                 set_number: 1,
                 reps: 8,
                 weight: 135.0,
                 completed: true,
                 completed_date: Some(recent_date.into()),
+                duration_seconds: None,
             }],
         };
         let non_finalized = ExerciseEntry {
@@ -462,6 +466,7 @@ mod tests {
                 weight: 0.0,
                 completed: false,
                 completed_date: None,
+                duration_seconds: None,
             }],
             ..finalized_completed.clone()
         };
@@ -480,6 +485,205 @@ mod tests {
         assert!(packet.contains("Finalized Bench"), "finalized + completed entry should appear");
         assert!(!packet.contains("Draft Squat"), "non-finalized entry should be excluded");
         assert!(!packet.contains("Abandoned Row"), "entry with no completed sets should be excluded");
+    }
+
+    // ── Duration fields backward-compatibility ────────────────────────────────
+
+    #[wasm_bindgen_test]
+    fn setlog_without_duration_defaults_to_none() {
+        let json = r#"{"set_number":1,"reps":8,"weight":100.0,"completed":true}"#;
+        let set: crate::models::SetLog = serde_json::from_str(json).unwrap();
+        assert!(set.duration_seconds.is_none());
+    }
+
+    #[wasm_bindgen_test]
+    fn setlog_with_duration_deserializes() {
+        let json = r#"{"set_number":1,"reps":1,"weight":0.0,"completed":true,"duration_seconds":30}"#;
+        let set: crate::models::SetLog = serde_json::from_str(json).unwrap();
+        assert_eq!(set.duration_seconds, Some(30));
+    }
+
+    #[wasm_bindgen_test]
+    fn setlog_duration_round_trips() {
+        let set = crate::models::SetLog {
+            set_number: 1,
+            reps: 1,
+            weight: 0.0,
+            completed: true,
+            completed_date: None,
+            duration_seconds: Some(45),
+        };
+        let json = serde_json::to_string(&set).unwrap();
+        let parsed: crate::models::SetLog = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.duration_seconds, Some(45));
+    }
+
+    #[wasm_bindgen_test]
+    fn scheduled_exercise_without_duration_defaults_to_none() {
+        let json = r#"{
+            "library_id":"Cat_Stretch","name":"Cat Stretch",
+            "target_sets":2,"reps_min":1,"reps_max":1,"rest_seconds":10,"notes":null
+        }"#;
+        let ex: ScheduledExercise = serde_json::from_str(json).unwrap();
+        assert!(ex.target_duration_seconds.is_none());
+    }
+
+    #[wasm_bindgen_test]
+    fn scheduled_exercise_with_duration_deserializes() {
+        let json = r#"{
+            "library_id":"Cat_Stretch","name":"Cat Stretch",
+            "target_sets":2,"reps_min":1,"reps_max":1,
+            "rest_seconds":10,"notes":"hold 30s",
+            "target_duration_seconds":30
+        }"#;
+        let ex: ScheduledExercise = serde_json::from_str(json).unwrap();
+        assert_eq!(ex.target_duration_seconds, Some(30));
+    }
+
+    #[wasm_bindgen_test]
+    fn exercise_entry_without_duration_defaults_to_none() {
+        let json = r#"{
+            "id":"x","date":"2026-01-01","exercise_name":"Row","exercise_id":"e1",
+            "session_id":null,"day_id":null,"day_name":null,
+            "target_sets":3,"reps_min":8,"reps_max":12,
+            "sets":[]
+        }"#;
+        let entry: ExerciseEntry = serde_json::from_str(json).unwrap();
+        assert!(entry.target_duration_seconds.is_none());
+    }
+
+    #[wasm_bindgen_test]
+    fn exercise_entry_with_duration_deserializes() {
+        let json = r#"{
+            "id":"x","date":"2026-01-01","exercise_name":"Cat Stretch","exercise_id":"Cat_Stretch",
+            "session_id":null,"day_id":null,"day_name":null,
+            "target_sets":2,"reps_min":1,"reps_max":1,
+            "sets":[{"set_number":1,"reps":1,"weight":0.0,"completed":true,"duration_seconds":30}],
+            "target_duration_seconds":30
+        }"#;
+        let entry: ExerciseEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.target_duration_seconds, Some(30));
+        assert_eq!(entry.sets[0].duration_seconds, Some(30));
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_workout_accepts_stretching_with_duration() {
+        let lib = vec![
+            lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press"),
+            {
+                let mut e = lib_entry("Standing_Hamstring_Stretch", "Standing Hamstring Stretch");
+                e.category = "stretching".into();
+                e.equipment = None;
+                e
+            },
+        ];
+        let json = r#"{
+            "name": "Push + Stretch",
+            "rationale": "Chest work followed by cooldown.",
+            "exercises": [
+                {"library_id":"Barbell_Bench_Press_-_Medium_Grip","name":"Bench Press",
+                 "target_sets":4,"reps_min":6,"reps_max":8,"rest_seconds":180,"notes":null},
+                {"library_id":"Standing_Hamstring_Stretch","name":"Standing Hamstring Stretch",
+                 "target_sets":2,"reps_min":1,"reps_max":1,"target_duration_seconds":30,
+                 "rest_seconds":10,"notes":"Hold each side 30s"}
+            ]
+        }"#;
+        let w = crate::coach::parse_workout_response(json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib)
+            .expect("stretching exercise with duration should pass");
+        assert_eq!(w.exercises.len(), 2);
+        assert_eq!(w.exercises[1].target_duration_seconds, Some(30));
+        assert!(w.exercises[0].target_duration_seconds.is_none());
+    }
+
+    #[wasm_bindgen_test]
+    fn coach_packet_mentions_stretching_and_balance() {
+        use crate::coach::{build_coach_packet, PacketInput};
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let goals = UserGoals::default();
+        let packet = build_coach_packet(PacketInput {
+            goals: &goals,
+            history: &[],
+            library: &lib,
+            scheduled: &[],
+            today: "2026-05-24",
+            target_date: "2026-05-25",
+        });
+        assert!(
+            packet.to_lowercase().contains("stretching"),
+            "coach packet should mention stretching"
+        );
+        assert!(
+            packet.to_lowercase().contains("balance"),
+            "coach packet should mention balance"
+        );
+        assert!(
+            packet.contains("target_duration_seconds"),
+            "coach packet should reference target_duration_seconds field"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn csv_export_includes_duration_column() {
+        let entry = ExerciseEntry {
+            id: "e1".into(),
+            date: "2026-01-01".into(),
+            exercise_name: "Cat Stretch".into(),
+            exercise_id: "Cat_Stretch".into(),
+            session_id: None,
+            day_id: None,
+            day_name: Some("Stretch Day".into()),
+            target_sets: 2,
+            reps_min: 1,
+            reps_max: 1,
+            sets: vec![
+                crate::models::SetLog {
+                    set_number: 1,
+                    reps: 1,
+                    weight: 0.0,
+                    completed: true,
+                    completed_date: Some("2026-01-01".into()),
+                    duration_seconds: Some(30),
+                },
+            ],
+            finalized: true,
+            created_at: "2026-01-01T00:00:00.000Z".into(),
+            target_duration_seconds: Some(30),
+        };
+        let csv = crate::csv_utils::export_history_csv(&[entry]);
+        assert!(csv.contains("duration_seconds"), "CSV header should include duration_seconds");
+        assert!(csv.contains(",30,"), "CSV row should include duration value");
+    }
+
+    #[wasm_bindgen_test]
+    fn csv_export_empty_duration_for_strength() {
+        let entry = ExerciseEntry {
+            id: "e2".into(),
+            date: "2026-01-01".into(),
+            exercise_name: "Bench Press".into(),
+            exercise_id: "Barbell_Bench_Press_-_Medium_Grip".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 3,
+            reps_min: 8,
+            reps_max: 12,
+            sets: vec![
+                crate::models::SetLog {
+                    set_number: 1,
+                    reps: 10,
+                    weight: 135.0,
+                    completed: true,
+                    completed_date: None,
+                    duration_seconds: None,
+                },
+            ],
+            finalized: true,
+            created_at: "2026-01-01T00:00:00.000Z".into(),
+            target_duration_seconds: None,
+        };
+        let csv = crate::csv_utils::export_history_csv(&[entry]);
+        let lines: Vec<&str> = csv.lines().collect();
+        assert!(lines[1].contains(",,true"), "strength exercise should have empty duration");
     }
 
     // ── Recency bucket ───────────────────────────────────────────────────────

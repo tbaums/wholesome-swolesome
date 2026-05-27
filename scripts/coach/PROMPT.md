@@ -106,8 +106,21 @@ Apply these rules:
 - **Equipment**: only prescribe exercises whose `equipment` value is in `goals.equipment`.
   If `goals.equipment` is empty, assume full commercial gym (all values OK).
 - **Constraints**: respect `goals.avoid` — never schedule lifts the user explicitly excluded.
-- **Order**: compounds before isolations. Heaviest/most-demanding first. End with any
-  cardio or mobility.
+- **Stretching (every session)**: Include 3-5 stretching exercises at the end of every
+  workout as a cooldown block. Target muscles worked during that session, plus any muscles
+  in the `15+ / never` bucket. Prescribe `target_sets: 2`, `reps_min: 1`, `reps_max: 1`,
+  `target_duration_seconds: 30` (a 30-second hold, 2 sets). Use `rest_seconds: 10`.
+- **Balance (2-3 sessions per week)**: Include 2-3 balance exercises per session, placed
+  after main strength work and before stretching. For timed holds: `target_sets: 2-3`,
+  `reps_min: 1`, `reps_max: 1`, `target_duration_seconds: 20-45`. For rep-based balance
+  drills: use normal `reps_min`/`reps_max` (e.g. 8-12 per side), omit
+  `target_duration_seconds`.
+- **Session time budget**: Reserve ~5 min for the cooldown stretch block and ~5 min for
+  balance work when included. Subtract from `session_minutes` before budgeting strength
+  sets.
+- **Order**: compounds before isolations. Heaviest/most-demanding first. Balance work
+  after main lifts. Stretching last (cooldown). Cardio before or after balance depending
+  on goal.
 
 ## Step 5 — Write the workout
 
@@ -129,6 +142,16 @@ Build a `ScheduledWorkout` JSON object:
       "reps_max": 8,
       "rest_seconds": 180,
       "notes": "RPE 7-8; pause 1s at bottom"
+    },
+    {
+      "library_id": "Standing_Hamstring_Stretch",
+      "name": "Standing Hamstring Stretch",
+      "target_sets": 2,
+      "reps_min": 1,
+      "reps_max": 1,
+      "target_duration_seconds": 30,
+      "rest_seconds": 10,
+      "notes": "Hold each side 30s; breathe through the stretch"
     }
   ],
   "created_at": "<ISO 8601 timestamp>"
@@ -141,6 +164,10 @@ If you can't find a perfect match for a movement you want to prescribe, pick the
 closest existing library entry rather than inventing an id. The pusher validates
 every id against `exercises.json` and aborts the run if any don't match, so
 freeform names are guaranteed to fail. `name` should match the library entry's `name`.
+
+For stretching and balance exercises that use timed holds, include
+`"target_duration_seconds": 30` (or appropriate value). This tells the app to show
+a seconds input instead of weight × reps.
 
 ## Step 6 — Merge and push
 

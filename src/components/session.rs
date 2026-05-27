@@ -90,6 +90,7 @@ fn ActiveSession() -> impl IntoView {
                             reps_max: log.reps_max,
                             sets,
                             finalized: true,
+                            target_duration_seconds: log.target_duration_seconds,
                         });
                     }
                 }
@@ -163,11 +164,15 @@ fn ExerciseCard(
             state.active_session.get()
                 .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
                 .map(|e| {
-                    let lib = state.library.get();
-                    if crate::library::is_cardio_exercise(&e.exercise_id, &e.exercise_name, &lib) {
-                        format!("{} min", e.reps_min)
+                    if let Some(dur) = e.target_duration_seconds {
+                        format!("{} sets × {}s hold", e.target_sets, dur)
                     } else {
-                        format!("{} sets × {}–{} reps", e.target_sets, e.reps_min, e.reps_max)
+                        let lib = state.library.get();
+                        if crate::library::is_cardio_exercise(&e.exercise_id, &e.exercise_name, &lib) {
+                            format!("{} min", e.reps_min)
+                        } else {
+                            format!("{} sets × {}–{} reps", e.target_sets, e.reps_min, e.reps_max)
+                        }
                     }
                 })
                 .unwrap_or_default()
@@ -226,6 +231,7 @@ fn ExerciseCard(
                             weight: last.weight,
                             completed: false,
                             completed_date: None,
+                            duration_seconds: last.duration_seconds,
                         });
                     }
                 }
@@ -319,6 +325,17 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         }
     };
 
+    let duration = {
+        let ex_id = ex_id.clone();
+        move || {
+            state.active_session.get()
+                .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
+                .and_then(|e| e.sets.get(set_idx).cloned())
+                .and_then(|s| s.duration_seconds)
+                .unwrap_or(0)
+        }
+    };
+
     let is_done = {
         let ex_id = ex_id.clone();
         move || {
@@ -355,6 +372,22 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                     if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {
                         if let Some(set) = log.sets.get_mut(set_idx) {
                             set.reps = val;
+                        }
+                    }
+                }
+            });
+        }
+    };
+
+    let on_duration_change = {
+        let ex_id = ex_id.clone();
+        move |e| {
+            let val: u32 = event_target_value(&e).parse().unwrap_or(0);
+            state.active_session.update(|opt| {
+                if let Some(s) = opt.as_mut() {
+                    if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {
+                        if let Some(set) = log.sets.get_mut(set_idx) {
+                            set.duration_seconds = Some(val);
                         }
                     }
                 }
@@ -410,97 +443,124 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         }
     };
 
+    let duration_str = move || {
+        let d = duration();
+        if d == 0 { String::new() } else { d.to_string() }
+    };
+
+    let is_dur_static = {
+        state.active_session.get_untracked()
+            .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
+            .and_then(|e| e.target_duration_seconds)
+            .is_some()
+    };
+
     let is_done2 = is_done.clone();
     let is_cardio_sep = is_cardio.clone();
 
-    view! {
-        <div class="set-row" class:set-done=is_done>
-            <span class="set-num">"Set " {set_idx + 1}</span>
-
-            <div class="set-inputs">
-                {
-                    let is_cardio = is_cardio.clone();
-                    let weight_str = weight_str.clone();
-                    let reps_str = reps_str.clone();
-                    let on_weight_change = on_weight_change.clone();
-                    let on_reps_change = on_reps_change.clone();
-                    move || if is_cardio() {
-                        let reps_str = reps_str.clone();
-                        let on_reps_change = on_reps_change.clone();
-                        view! {
-                            <input
-                                type="number"
-                                inputmode="numeric"
-                                step="1"
-                                min="0"
-                                class="set-num-input"
-                                placeholder="min"
-                                prop:value=reps_str
-                                on:input=on_reps_change
-                            />
-                        }.into_any()
-                    } else {
-                        let weight_str = weight_str.clone();
-                        let on_weight_change = on_weight_change.clone();
-                        view! {
-                            <input
-                                type="number"
-                                inputmode="decimal"
-                                step="any"
-                                min="0"
-                                class="set-num-input"
-                                placeholder="wt"
-                                prop:value=weight_str
-                                on:input=on_weight_change
-                            />
-                        }.into_any()
-                    }
-                }
-                <span class="set-x">{move || if is_cardio_sep() { "@" } else { "×" }}</span>
-                {
-                    let is_cardio = is_cardio.clone();
-                    move || if is_cardio() {
-                        let weight_str = weight_str.clone();
-                        let on_weight_change = on_weight_change.clone();
-                        view! {
-                            <input
-                                type="number"
-                                inputmode="numeric"
-                                step="1"
-                                min="1"
-                                max="10"
-                                class="set-num-input"
-                                placeholder="RPE"
-                                prop:value=weight_str
-                                on:input=on_weight_change
-                            />
-                        }.into_any()
-                    } else {
-                        let reps_str = reps_str.clone();
-                        let on_reps_change = on_reps_change.clone();
-                        view! {
-                            <input
-                                type="number"
-                                inputmode="numeric"
-                                step="1"
-                                min="0"
-                                class="set-num-input"
-                                placeholder="reps"
-                                prop:value=reps_str
-                                on:input=on_reps_change
-                            />
-                        }.into_any()
-                    }
-                }
+    if is_dur_static {
+        view! {
+            <div class="set-row" class:set-done=is_done>
+                <span class="set-num">"Set " {set_idx + 1}</span>
+                <div class="set-inputs">
+                    <input
+                        type="number"
+                        inputmode="numeric"
+                        step="5"
+                        min="0"
+                        class="set-num-input duration-input"
+                        placeholder="sec"
+                        prop:value=duration_str
+                        on:change=on_duration_change
+                    />
+                    <span class="set-x">"s"</span>
+                </div>
+                <button class="set-done-btn" class:done=is_done2 on:click=toggle_done>"✓"</button>
             </div>
+        }.into_any()
+    } else {
+        view! {
+            <div class="set-row" class:set-done=is_done>
+                <span class="set-num">"Set " {set_idx + 1}</span>
 
-            <button
-                class="set-done-btn"
-                class:done=is_done2
-                on:click=toggle_done
-            >
-                "✓"
-            </button>
-        </div>
+                <div class="set-inputs">
+                    {
+                        let is_cardio = is_cardio.clone();
+                        let weight_str = weight_str.clone();
+                        let reps_str = reps_str.clone();
+                        let on_weight_change = on_weight_change.clone();
+                        let on_reps_change = on_reps_change.clone();
+                        move || if is_cardio() {
+                            let reps_str = reps_str.clone();
+                            let on_reps_change = on_reps_change.clone();
+                            view! {
+                                <input
+                                    type="number"
+                                    inputmode="numeric"
+                                    step="1"
+                                    min="0"
+                                    class="set-num-input"
+                                    placeholder="min"
+                                    prop:value=reps_str
+                                    on:input=on_reps_change
+                                />
+                            }.into_any()
+                        } else {
+                            let weight_str = weight_str.clone();
+                            let on_weight_change = on_weight_change.clone();
+                            view! {
+                                <input
+                                    type="number"
+                                    inputmode="decimal"
+                                    step="any"
+                                    min="0"
+                                    class="set-num-input"
+                                    placeholder="wt"
+                                    prop:value=weight_str
+                                    on:input=on_weight_change
+                                />
+                            }.into_any()
+                        }
+                    }
+                    <span class="set-x">{move || if is_cardio_sep() { "@" } else { "×" }}</span>
+                    {
+                        let is_cardio = is_cardio.clone();
+                        move || if is_cardio() {
+                            let weight_str = weight_str.clone();
+                            let on_weight_change = on_weight_change.clone();
+                            view! {
+                                <input
+                                    type="number"
+                                    inputmode="numeric"
+                                    step="1"
+                                    min="1"
+                                    max="10"
+                                    class="set-num-input"
+                                    placeholder="RPE"
+                                    prop:value=weight_str
+                                    on:input=on_weight_change
+                                />
+                            }.into_any()
+                        } else {
+                            let reps_str = reps_str.clone();
+                            let on_reps_change = on_reps_change.clone();
+                            view! {
+                                <input
+                                    type="number"
+                                    inputmode="numeric"
+                                    step="1"
+                                    min="0"
+                                    class="set-num-input"
+                                    placeholder="reps"
+                                    prop:value=reps_str
+                                    on:input=on_reps_change
+                                />
+                            }.into_any()
+                        }
+                    }
+                </div>
+                <button class="set-done-btn" class:done=is_done2 on:click=toggle_done>"✓"</button>
+            </div>
+        }.into_any()
     }
 }

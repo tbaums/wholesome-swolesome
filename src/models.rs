@@ -152,6 +152,8 @@ pub struct ScheduledExercise {
     #[serde(default)]
     pub rest_seconds: u32,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub target_duration_seconds: Option<u32>,
 }
 
 // ── Session (in-progress / completed workout) ────────────────────────────────
@@ -176,6 +178,8 @@ pub struct ExerciseLog {
     pub reps_min: u32,
     pub reps_max: u32,
     pub sets: Vec<SetLog>,
+    #[serde(default)]
+    pub target_duration_seconds: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -187,6 +191,8 @@ pub struct SetLog {
     pub completed: bool,
     #[serde(default)]
     pub completed_date: Option<String>,
+    #[serde(default)]
+    pub duration_seconds: Option<u32>,
 }
 
 // ── Flat exercise-entry history (unchanged) ───────────────────────────────────
@@ -208,6 +214,8 @@ pub struct ExerciseEntry {
     pub finalized: bool,
     #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
+    pub target_duration_seconds: Option<u32>,
 }
 
 // ── Library exercise (deserialized from /data/exercises.json) ────────────────
