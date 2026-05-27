@@ -286,7 +286,7 @@ fn BottomNav() -> impl IntoView {
                 state.navigate(View::Home);
             }>
                 <span class="icon">
-                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                         <path d="M6.5 8v8M17.5 8v8M3 10v4M21 10v4M6.5 12h11"/>
                     </svg>
                 </span>
@@ -295,7 +295,7 @@ fn BottomNav() -> impl IntoView {
             // Library — book
             <button class="nav-btn" class:active=is_library on:click=move |_| state.navigate(View::Library)>
                 <span class="icon">
-                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M4 4.5A2.5 2.5 0 016.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15z"/>
                         <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
                     </svg>
@@ -305,7 +305,7 @@ fn BottomNav() -> impl IntoView {
             // Exercises — list (freeform logging)
             <button class="nav-btn" class:active=is_exercises on:click=move |_| state.navigate(View::Exercises)>
                 <span class="icon">
-                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="8" y1="6" x2="21" y2="6"/>
                         <line x1="8" y1="12" x2="21" y2="12"/>
                         <line x1="8" y1="18" x2="21" y2="18"/>
@@ -319,7 +319,7 @@ fn BottomNav() -> impl IntoView {
             // History — trending up
             <button class="nav-btn" class:active=is_history on:click=move |_| state.navigate(View::History)>
                 <span class="icon">
-                    <svg width="24" height="24" attr:viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
                         <polyline points="16 7 22 7 22 13"/>
                     </svg>
