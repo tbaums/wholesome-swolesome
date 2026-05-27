@@ -26,8 +26,8 @@ const COACH_RESPONSE = JSON.stringify(
       'Prioritizes glute medius/maximus, hamstrings, and hip abductors to build the curve through hips and seat. Adds upper-back posture work (face pulls, rear-delt flyes) so shoulders sit back and chest opens without adding lat flare. Skips direct biceps, heavy pressing, and shrugs — those reinforce the V-taper / trap bulk you want to deemphasize. 60-min total, hypertrophy rep ranges, moderate rest.',
     exercises: [
       {
-        library_id: null,
-        name: 'Barbell Hip Thrust',
+        library_id: 'Barbell_Glute_Bridge',
+        name: 'Barbell Glute Bridge',
         target_sets: 4,
         reps_min: 8,
         reps_max: 12,
@@ -35,7 +35,7 @@ const COACH_RESPONSE = JSON.stringify(
         notes: 'Pause 1s at lockout; full hip extension. Primary glute mass driver.',
       },
       {
-        library_id: null,
+        library_id: 'Romanian_Deadlift',
         name: 'Romanian Deadlift',
         target_sets: 4,
         reps_min: 8,
@@ -44,8 +44,8 @@ const COACH_RESPONSE = JSON.stringify(
         notes: 'Hinge bias — hamstrings + glute fibers, minimal lower-back drive.',
       },
       {
-        library_id: null,
-        name: 'Cable Hip Abduction (standing)',
+        library_id: 'Thigh_Abductor',
+        name: 'Thigh Abductor',
         target_sets: 3,
         reps_min: 12,
         reps_max: 15,
@@ -53,8 +53,8 @@ const COACH_RESPONSE = JSON.stringify(
         notes: 'Glute medius — builds hip width / shelf above the seat.',
       },
       {
-        library_id: null,
-        name: 'Bulgarian Split Squat (dumbbell)',
+        library_id: 'Barbell_Walking_Lunge',
+        name: 'Barbell Walking Lunge',
         target_sets: 3,
         reps_min: 10,
         reps_max: 12,
@@ -62,8 +62,8 @@ const COACH_RESPONSE = JSON.stringify(
         notes: 'Long stride, torso slightly forward — biases glute over quad.',
       },
       {
-        library_id: null,
-        name: 'Face Pull (cable, rope)',
+        library_id: 'Face_Pull',
+        name: 'Face Pull',
         target_sets: 3,
         reps_min: 12,
         reps_max: 15,
@@ -71,8 +71,8 @@ const COACH_RESPONSE = JSON.stringify(
         notes: 'Rear delts + external rotation — posture, opens chest without bulking pecs.',
       },
       {
-        library_id: null,
-        name: 'Seated Cable Row (close grip, light)',
+        library_id: 'Seated_Cable_Rows',
+        name: 'Seated Cable Rows',
         target_sets: 3,
         reps_min: 12,
         reps_max: 15,
@@ -165,16 +165,8 @@ test.describe('Transfemme walkthrough', () => {
     await page.waitForSelector('.coach-packet-pre');
     await shot(page, 'coach_brief_top');
 
-    // Override target date to TODAY so the imported workout shows in the
-    // TODAY card (which is the only card with a Start button).
-    const todayStr = await page.evaluate(() => {
-      const d = new Date();
-      const pad = (n: number) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    });
-    await page.locator('input[type="date"]').fill(todayStr);
-
-    // Scroll to bottom of the brief so paste textarea is visible
+    // Target date auto-computes to today (no scheduled workout yet).
+    // Scroll to bottom of the brief so paste textarea is visible.
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await shot(page, 'coach_brief_bottom');
 
