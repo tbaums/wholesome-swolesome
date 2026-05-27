@@ -19,7 +19,7 @@ pub enum View {
     Session { workout_id: String },
     Exercises,
     Library,
-    LibraryDetail { exercise_id: String },
+    LibraryDetail { exercise_id: String, from: Option<Box<View>> },
     History,
     SessionDetail { session_id: String },
     Progress { exercise_name: String },
@@ -240,8 +240,8 @@ fn CurrentView() -> impl IntoView {
         }
         View::Exercises => view! { <crate::components::exercises::ExercisesView/> }.into_any(),
         View::Library => view! { <crate::components::library_view::LibraryView/> }.into_any(),
-        View::LibraryDetail { exercise_id } => {
-            view! { <crate::components::library_view::LibraryDetailView exercise_id=exercise_id/> }
+        View::LibraryDetail { exercise_id, from } => {
+            view! { <crate::components::library_view::LibraryDetailView exercise_id=exercise_id from=from/> }
                 .into_any()
         }
         View::History => view! { <crate::components::history::HistoryView/> }.into_any(),
