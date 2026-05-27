@@ -661,7 +661,7 @@ fn FreeformSetRow(
                             <input
                                 type="number"
                                 inputmode="decimal"
-                                step="2.5"
+                                step="any"
                                 min="0"
                                 class="set-num-input"
                                 placeholder="wt"

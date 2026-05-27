@@ -430,7 +430,7 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                             <input
                                 type="number"
                                 inputmode="decimal"
-                                step="2.5"
+                                step="any"
                                 min="0"
                                 class="set-num-input"
                                 placeholder="wt"
