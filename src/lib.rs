@@ -236,9 +236,13 @@ mod tests {
         assert_eq!(parsed[0].equipment.as_deref(), Some("other"));
     }
 
-    // ── Coach: library-id validation ─────────────────────────────────────────
+    // ── Category / cardio detection ─────────────────────────────────────────
 
     fn lib_entry(id: &str, name: &str) -> crate::models::LibraryExercise {
+        lib_entry_with_cat(id, name, "strength")
+    }
+
+    fn lib_entry_with_cat(id: &str, name: &str, cat: &str) -> crate::models::LibraryExercise {
         crate::models::LibraryExercise {
             id: id.into(),
             name: name.into(),
@@ -249,10 +253,54 @@ mod tests {
             primary_muscles: vec!["chest".into()],
             secondary_muscles: vec!["triceps".into()],
             instructions: vec![],
-            category: "strength".into(),
+            category: cat.into(),
             images: vec![],
         }
     }
+
+    #[wasm_bindgen_test]
+    fn category_of_finds_by_id() {
+        use crate::library::category_of;
+        let lib = vec![lib_entry_with_cat("Jogging_Treadmill", "Jogging, Treadmill", "cardio")];
+        assert_eq!(category_of("Jogging_Treadmill", "anything", &lib), Some("cardio"));
+    }
+
+    #[wasm_bindgen_test]
+    fn category_of_falls_back_to_name() {
+        use crate::library::category_of;
+        let lib = vec![lib_entry_with_cat("Jogging_Treadmill", "Jogging, Treadmill", "cardio")];
+        assert_eq!(category_of("wrong_id", "jogging, treadmill", &lib), Some("cardio"));
+    }
+
+    #[wasm_bindgen_test]
+    fn category_of_returns_none_for_unknown() {
+        use crate::library::category_of;
+        let lib = vec![lib_entry("Bench", "Bench Press")];
+        assert_eq!(category_of("no_match", "no match", &lib), None);
+    }
+
+    #[wasm_bindgen_test]
+    fn is_cardio_true_for_cardio_category() {
+        use crate::library::is_cardio_exercise;
+        let lib = vec![lib_entry_with_cat("Running_Treadmill", "Running, Treadmill", "cardio")];
+        assert!(is_cardio_exercise("Running_Treadmill", "Running, Treadmill", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_cardio_false_for_strength() {
+        use crate::library::is_cardio_exercise;
+        let lib = vec![lib_entry("Bench", "Bench Press")];
+        assert!(!is_cardio_exercise("Bench", "Bench Press", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_cardio_false_when_not_in_library() {
+        use crate::library::is_cardio_exercise;
+        let lib = vec![lib_entry("Bench", "Bench Press")];
+        assert!(!is_cardio_exercise("Unknown", "Unknown Exercise", &lib));
+    }
+
+    // ── Coach: library-id validation ─────────────────────────────────────────
 
     #[wasm_bindgen_test]
     fn parse_workout_accepts_known_library_id() {
