@@ -49,7 +49,7 @@ function makeScheduledWorkout(date: string) {
 async function seedWorkout(page: Parameters<typeof freshPage>[0], date: string) {
   const workout = makeScheduledWorkout(date);
   await page.evaluate((w) => {
-    localStorage.setItem('scheduled_workouts', JSON.stringify([w]));
+    localStorage.setItem('ws_scheduled_workouts', JSON.stringify([w]));
   }, workout);
   await page.goto(BASE);
   await page.waitForSelector('.bottom-nav');
