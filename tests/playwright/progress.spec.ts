@@ -6,6 +6,7 @@ import { freshPage } from './helpers';
 function makeEntry(opts: {
   id: string;
   exerciseName: string;
+  exerciseId?: string;
   date: string;
   createdAt: string;
   sessionId?: string | null;
@@ -17,7 +18,7 @@ function makeEntry(opts: {
     date: opts.date,
     created_at: opts.createdAt,
     exercise_name: opts.exerciseName,
-    exercise_id: `ex-${opts.id}`,
+    exercise_id: opts.exerciseId ?? `ex-${opts.id}`,
     session_id: opts.sessionId ?? null,
     day_id: null,
     day_name: opts.dayName ?? null,
@@ -120,6 +121,39 @@ test.describe('Progress view', () => {
     const pb = page.locator('.text-accent').first();
     await expect(pb).toContainText('275');
     await expect(pb).not.toContainText('315');
+  });
+
+  test('cardio entries display Min / Intensity columns and a min-based PB', async ({ page }) => {
+    // Library exercise id "Jogging_Treadmill" exists in public/data/exercises.json
+    // with category "cardio". reps stores minutes, weight stores RPE.
+    const entry = makeEntry({
+      id: 'c1',
+      exerciseName: 'Jogging, Treadmill',
+      exerciseId: 'Jogging_Treadmill',
+      date: '2026-05-01',
+      createdAt: '2026-05-01T10:00:00.000Z',
+      sets: [
+        { reps: 20, weight: 5, completed: true },
+        { reps: 30, weight: 7, completed: true }, // longest completed = PB
+        { reps: 45, weight: 9, completed: false }, // failed — must NOT win
+      ],
+    });
+    await page.evaluate(
+      (val) => localStorage.setItem('ws_ex_history', val),
+      JSON.stringify([entry]),
+    );
+    await page.reload();
+    await page.waitForSelector('.bottom-nav');
+    await openFirstProgress(page);
+
+    // Library load is async; the cardio detection only flips once it lands.
+    await expect(page.locator('.progress-table th').nth(1)).toHaveText('Min', { timeout: 10_000 });
+    await expect(page.locator('.progress-table th').nth(2)).toHaveText('Intensity');
+
+    const pb = page.locator('.text-accent').first();
+    await expect(pb).toContainText('30 min');
+    await expect(pb).toContainText('RPE 7');
+    await expect(pb).not.toContainText('45'); // failed set excluded
   });
 
   test('back button returns to the history list', async ({ page }) => {
