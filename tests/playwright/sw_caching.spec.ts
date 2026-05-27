@@ -14,6 +14,12 @@ import { BASE } from './helpers';
 test.use({ serviceWorkers: 'allow' });
 
 test.describe('Service Worker: cross-origin requests bypass the cache', () => {
+  // WebKit's Playwright integration doesn't support context.route() for
+  // cross-origin fetches through a service worker — the SW intercepts the
+  // request before Playwright's route handler, causing "Load failed".
+  test.skip(({ browserName }) => browserName === 'webkit',
+    'WebKit does not support context.route() with SW-intercepted cross-origin fetches');
+
   test('two fetches to the same cross-origin URL see fresh server-side state', async ({ page, context }) => {
     const PROBE = 'https://probe.example.test/sw-cache-regression';
 
