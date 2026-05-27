@@ -31,11 +31,11 @@ const LEG_DAY = JSON.stringify({
   name: 'Library Leg Day',
   rationale: 'Library-id-less workout whose names match library entries — used to verify heatmap coloring end-to-end.',
   exercises: [
-    { library_id: null, name: 'Barbell Squat',        target_sets: 3, reps_min: 5,  reps_max: 8,  rest_seconds: 120, notes: '' },
-    { library_id: null, name: 'Romanian Deadlift',    target_sets: 3, reps_min: 8,  reps_max: 10, rest_seconds: 90,  notes: '' },
-    { library_id: null, name: 'Leg Press',            target_sets: 3, reps_min: 10, reps_max: 12, rest_seconds: 90,  notes: '' },
-    { library_id: null, name: 'Lying Leg Curls',      target_sets: 3, reps_min: 10, reps_max: 12, rest_seconds: 60,  notes: '' },
-    { library_id: null, name: 'Standing Calf Raises', target_sets: 3, reps_min: 12, reps_max: 15, rest_seconds: 45,  notes: '' },
+    { library_id: 'Barbell_Squat',        name: 'Barbell Squat',        target_sets: 3, reps_min: 5,  reps_max: 8,  rest_seconds: 120, notes: '' },
+    { library_id: 'Romanian_Deadlift',    name: 'Romanian Deadlift',    target_sets: 3, reps_min: 8,  reps_max: 10, rest_seconds: 90,  notes: '' },
+    { library_id: 'Leg_Press',            name: 'Leg Press',            target_sets: 3, reps_min: 10, reps_max: 12, rest_seconds: 90,  notes: '' },
+    { library_id: 'Lying_Leg_Curls',      name: 'Lying Leg Curls',      target_sets: 3, reps_min: 10, reps_max: 12, rest_seconds: 60,  notes: '' },
+    { library_id: 'Standing_Calf_Raises', name: 'Standing Calf Raises', target_sets: 3, reps_min: 12, reps_max: 15, rest_seconds: 45,  notes: '' },
   ],
 });
 
@@ -76,14 +76,7 @@ test.describe('Leg-day walkthrough', () => {
     await page.locator('button', { hasText: 'Generate workout with Claude' }).click();
     await page.waitForSelector('.coach-packet-pre');
 
-    // Schedule for today so the TODAY card shows a Start button.
-    const todayStr = await page.evaluate(() => {
-      const d = new Date();
-      const pad = (n: number) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    });
-    await page.locator('input[type="date"]').fill(todayStr);
-
+    // Target date auto-computes to today (no scheduled workout yet).
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const pasteBox = page.locator('textarea').filter({ hasText: '' }).last();
     await pasteBox.fill(LEG_DAY);
