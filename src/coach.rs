@@ -92,7 +92,9 @@ pub fn build_coach_packet(input: PacketInput<'_>) -> String {
                 let summary: Vec<String> = done
                     .iter()
                     .map(|s| {
-                        if s.weight > 0.0 {
+                        if let Some(dur) = s.duration_seconds {
+                            format!("{}s", dur)
+                        } else if s.weight > 0.0 {
                             format!("{}x{:.0}", s.reps, s.weight)
                         } else {
                             format!("{}", s.reps)
@@ -146,6 +148,10 @@ Design ONE workout for the target date. Apply:
 - **Movement balance** — across a week, balance push/pull, knee-dominant / hip-dominant, vertical / horizontal.
 - **Volume** — match `session_minutes`. Plan ~10-25 working sets total. Include rest_seconds appropriate for the goal (60-90s for hypertrophy, 180-300s for strength).
 - **Equipment** — only prescribe exercises whose `equipment` is in the user's available list (empty list = full commercial gym, all equipment OK).
+- **Stretching (every session)** — include 3-5 stretching exercises at the end as a cooldown. Target muscles worked in the session plus any in the "stale/never" bucket. Use `target_sets: 2`, `reps_min: 1`, `reps_max: 1`, `target_duration_seconds: 30`, `rest_seconds: 10`.
+- **Balance (2-3 sessions per week)** — include 2-3 balance exercises after main lifts, before stretching. For timed holds: `target_sets: 2-3`, `reps_min: 1`, `reps_max: 1`, `target_duration_seconds: 20-45`. For rep-based balance drills: use normal reps, omit `target_duration_seconds`.
+- **Session time budget** — reserve ~5 min for cooldown stretches and ~5 min for balance work. Subtract from `session_minutes` before budgeting strength sets.
+- **Order** — compounds before isolations, heaviest first. Balance work after main lifts. Stretching last (cooldown).
 
 ## Response format
 
@@ -164,12 +170,22 @@ Reply with **ONLY** this JSON, nothing else (no markdown fence, no commentary):
       "reps_max": 8,
       "rest_seconds": 180,
       "notes": "RPE 7-8; pause 1s at bottom"
+    },
+    {
+      "library_id": "Standing_Hamstring_Stretch",
+      "name": "Standing Hamstring Stretch",
+      "target_sets": 2,
+      "reps_min": 1,
+      "reps_max": 1,
+      "target_duration_seconds": 30,
+      "rest_seconds": 10,
+      "notes": "Hold each side 30s"
     }
   ]
 }
 ```
 
-`library_id` is **required** for every exercise and must exactly match an `id` from the table above. `name` should match the library `name` for consistency. `notes` can be null. Order exercises in the sequence they should be performed.
+`library_id` is **required** for every exercise and must exactly match an `id` from the table above. `name` should match the library `name` for consistency. `notes` can be null. For stretching/balance exercises with timed holds, include `target_duration_seconds` — the app shows a seconds input instead of weight × reps. Order exercises in the sequence they should be performed.
 "#,
     );
 

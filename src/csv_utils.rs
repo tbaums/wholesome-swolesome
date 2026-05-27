@@ -7,12 +7,13 @@ use crate::models::ExerciseEntry;
 // day_name is empty for freeform entries.
 
 pub fn export_history_csv(history: &[ExerciseEntry]) -> String {
-    let mut out = String::from("entry_id,date,day_name,exercise_name,set_number,reps,weight,completed\n");
+    let mut out = String::from("entry_id,date,day_name,exercise_name,set_number,reps,weight,duration_seconds,completed\n");
     for entry in history {
         let day_name = entry.day_name.as_deref().unwrap_or("");
         for set in &entry.sets {
+            let dur = set.duration_seconds.map(|d| d.to_string()).unwrap_or_default();
             out.push_str(&format!(
-                "{},{},{},{},{},{},{},{}\n",
+                "{},{},{},{},{},{},{},{},{}\n",
                 csv_field(&entry.id),
                 csv_field(&entry.date),
                 csv_field(day_name),
@@ -20,6 +21,7 @@ pub fn export_history_csv(history: &[ExerciseEntry]) -> String {
                 set.set_number,
                 set.reps,
                 set.weight,
+                dur,
                 set.completed,
             ));
         }

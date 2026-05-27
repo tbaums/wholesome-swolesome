@@ -355,7 +355,12 @@ pub fn new_session_from_scheduled(
         .exercises
         .iter()
         .map(|ex| {
-            let prev_sets = last_completed_sets(history, ex);
+            let is_duration = ex.target_duration_seconds.is_some();
+            let prev_sets = if is_duration {
+                Vec::new()
+            } else {
+                last_completed_sets(history, ex)
+            };
 
             let sets = (1..=ex.target_sets)
                 .map(|n| {
@@ -371,6 +376,7 @@ pub fn new_session_from_scheduled(
                         weight,
                         completed: false,
                         completed_date: None,
+                        duration_seconds: ex.target_duration_seconds,
                     }
                 })
                 .collect();
@@ -382,6 +388,7 @@ pub fn new_session_from_scheduled(
                 reps_min: ex.reps_min,
                 reps_max: ex.reps_max,
                 sets,
+                target_duration_seconds: ex.target_duration_seconds,
             }
         })
         .collect();

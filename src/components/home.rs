@@ -109,7 +109,11 @@ fn ScheduledCard(workout: ScheduledWorkout, #[prop()] label: &'static str) -> im
             })}
             <ul class="today-ex-list">
                 {exercises.iter().map(|ex| {
-                    let prescription = format!("{}×{}-{}", ex.target_sets, ex.reps_min, ex.reps_max);
+                    let prescription = if let Some(dur) = ex.target_duration_seconds {
+                        format!("{}×{}s", ex.target_sets, dur)
+                    } else {
+                        format!("{}×{}-{}", ex.target_sets, ex.reps_min, ex.reps_max)
+                    };
                     view! {
                         <li class="today-ex-row">
                             <span class="today-ex-name">{ex.name.clone()}</span>
