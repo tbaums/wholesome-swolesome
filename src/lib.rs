@@ -367,6 +367,73 @@ mod tests {
         );
     }
 
+    // ── Coach: history filtering ───────────────────────────────────────────
+
+    #[wasm_bindgen_test]
+    fn coach_packet_excludes_non_finalized_and_incomplete_entries() {
+        use crate::coach::{build_coach_packet, PacketInput};
+        use crate::models::SetLog;
+
+        let today = "2026-05-25";
+        let recent_date = "2026-05-24";
+
+        let finalized_completed = ExerciseEntry {
+            id: "e1".into(),
+            session_id: None,
+            day_id: None,
+            day_name: Some("Push".into()),
+            exercise_id: "bench".into(),
+            exercise_name: "Finalized Bench".into(),
+            date: recent_date.into(),
+            created_at: format!("{recent_date}T10:00:00.000Z"),
+            target_sets: 3,
+            reps_min: 8,
+            reps_max: 12,
+            finalized: true,
+            sets: vec![SetLog {
+                set_number: 1,
+                reps: 8,
+                weight: 135.0,
+                completed: true,
+                completed_date: Some(recent_date.into()),
+            }],
+        };
+        let non_finalized = ExerciseEntry {
+            id: "e2".into(),
+            exercise_name: "Draft Squat".into(),
+            finalized: false,
+            ..finalized_completed.clone()
+        };
+        let no_completed_sets = ExerciseEntry {
+            id: "e3".into(),
+            exercise_name: "Abandoned Row".into(),
+            finalized: true,
+            sets: vec![SetLog {
+                set_number: 1,
+                reps: 0,
+                weight: 0.0,
+                completed: false,
+                completed_date: None,
+            }],
+            ..finalized_completed.clone()
+        };
+
+        let history = vec![finalized_completed, non_finalized, no_completed_sets];
+        let lib = vec![lib_entry("bench", "Bench Press")];
+        let packet = build_coach_packet(PacketInput {
+            goals: &UserGoals::default(),
+            history: &history,
+            library: &lib,
+            scheduled: &[],
+            today,
+            target_date: "2026-05-26",
+        });
+
+        assert!(packet.contains("Finalized Bench"), "finalized + completed entry should appear");
+        assert!(!packet.contains("Draft Squat"), "non-finalized entry should be excluded");
+        assert!(!packet.contains("Abandoned Row"), "entry with no completed sets should be excluded");
+    }
+
     // ── Recency bucket ───────────────────────────────────────────────────────
 
     #[wasm_bindgen_test]
