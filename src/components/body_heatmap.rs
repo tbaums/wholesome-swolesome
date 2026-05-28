@@ -126,75 +126,77 @@ fn render_front(fills: &Fills) -> impl IntoView {
     view! {
         <svg class="body-svg" viewBox="-30 -10 260 480" xmlns="http://www.w3.org/2000/svg">
             // ── Silhouette base ─────────────────────────────────────────
-            // Head + neck
-            <circle cx="100" cy="30" r="22" fill="#2d2050" stroke=outline stroke-width="1.5"/>
-            <rect x="92" y="50" width="16" height="10" fill={fill_of(fills, "neck")} stroke=outline stroke-width="1"/>
+            // Head
+            <circle cx="100" cy="32" r="20" fill="#2d2050" stroke=outline stroke-width="1.5"/>
+            // Neck
+            <path d="M 88,50 C 90,58 90,62 86,68 L 114,68 C 110,62 110,58 112,50 Z"
+                  fill={fill_of(fills, "neck")} stroke=outline stroke-width="1"/>
 
-            // Torso (shoulders → waist → hips)
-            <path d="M 56,68 Q 100,58 144,68 L 158,98 L 154,200 L 138,260 L 62,260 L 46,200 L 42,98 Z"
+            // Torso (shoulders → ribs → waist → hips)
+            <path d="M 86,68 C 70,68 56,76 50,90 C 44,108 44,128 46,150 C 48,176 50,196 56,214 C 62,234 64,250 60,266 C 70,270 86,272 100,272 C 114,272 130,270 140,266 C 136,250 138,234 144,214 C 150,196 152,176 154,150 C 156,128 156,108 150,90 C 144,76 130,68 114,68 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
 
-            // Arms (upper)
-            <path d="M 42,98 L 22,150 L 18,210 L 32,212 L 44,170 L 50,118 Z"
+            // Upper arms
+            <path d="M 50,90 C 38,108 30,138 26,170 C 24,188 26,202 30,212 C 38,210 44,200 46,186 C 50,162 52,138 54,118 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
-            <path d="M 158,98 L 178,150 L 182,210 L 168,212 L 156,170 L 150,118 Z"
+            <path d="M 150,90 C 162,108 170,138 174,170 C 176,188 174,202 170,212 C 162,210 156,200 154,186 C 150,162 148,138 146,118 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
 
-            // Forearms (lower arms)
-            <path d="M 18,210 L 14,280 L 26,290 L 36,220 Z"
+            // Forearms
+            <path d="M 30,212 C 26,236 22,266 20,290 C 28,294 36,290 38,278 C 42,256 44,234 44,214 Z"
                   fill={fill_of(fills, "forearms")} stroke=outline stroke-width="1"/>
-            <path d="M 182,210 L 186,280 L 174,290 L 164,220 Z"
+            <path d="M 170,212 C 174,236 178,266 180,290 C 172,294 164,290 162,278 C 158,256 156,234 156,214 Z"
                   fill={fill_of(fills, "forearms")} stroke=outline stroke-width="1"/>
 
             // Legs
-            <path d="M 62,260 L 86,260 L 96,360 L 86,430 L 60,432 L 56,360 Z"
+            <path d="M 60,266 C 56,300 56,340 60,378 C 62,404 64,420 66,432 C 76,434 88,432 92,428 C 96,408 96,378 98,344 C 98,316 96,290 96,272 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
-            <path d="M 138,260 L 114,260 L 104,360 L 114,430 L 140,432 L 144,360 Z"
+            <path d="M 140,266 C 144,300 144,340 140,378 C 138,404 136,420 134,432 C 124,434 112,432 108,428 C 104,408 104,378 102,344 C 102,316 104,290 104,272 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
 
             // ── Muscle regions (overlays) ──────────────────────────────
             // Shoulders (front delts)
-            <path d="M 46,72 Q 38,90 50,108 L 70,98 L 64,76 Z"
-                  fill={fill_of(fills, "shoulders")} stroke=outline stroke-width="0.8"/>
-            <path d="M 154,72 Q 162,90 150,108 L 130,98 L 136,76 Z"
-                  fill={fill_of(fills, "shoulders")} stroke=outline stroke-width="0.8"/>
+            <path d="M 50,90 C 44,98 42,108 44,120 C 56,118 66,108 70,96 C 64,90 56,88 50,90 Z"
+                  fill={fill_of(fills, "shoulders")} stroke=outline stroke-width="0.6"/>
+            <path d="M 150,90 C 156,98 158,108 156,120 C 144,118 134,108 130,96 C 136,90 144,88 150,90 Z"
+                  fill={fill_of(fills, "shoulders")} stroke=outline stroke-width="0.6"/>
 
             // Chest (pectorals)
-            <path d="M 64,78 Q 78,72 96,76 L 98,138 L 70,140 Q 56,128 60,108 Z"
-                  fill={fill_of(fills, "chest")} stroke=outline stroke-width="0.8"/>
-            <path d="M 136,78 Q 122,72 104,76 L 102,138 L 130,140 Q 144,128 140,108 Z"
-                  fill={fill_of(fills, "chest")} stroke=outline stroke-width="0.8"/>
+            <path d="M 70,96 C 74,90 86,86 98,88 L 98,140 C 86,144 74,142 66,134 C 60,122 62,108 70,96 Z"
+                  fill={fill_of(fills, "chest")} stroke=outline stroke-width="0.6"/>
+            <path d="M 130,96 C 126,90 114,86 102,88 L 102,140 C 114,144 126,142 134,134 C 140,122 138,108 130,96 Z"
+                  fill={fill_of(fills, "chest")} stroke=outline stroke-width="0.6"/>
 
             // Biceps
-            <path d="M 28,128 Q 22,156 32,200 L 46,196 Q 52,160 46,128 Z"
-                  fill={fill_of(fills, "biceps")} stroke=outline stroke-width="0.8"/>
-            <path d="M 172,128 Q 178,156 168,200 L 154,196 Q 148,160 154,128 Z"
-                  fill={fill_of(fills, "biceps")} stroke=outline stroke-width="0.8"/>
+            <path d="M 34,128 C 28,150 30,180 38,206 C 46,202 50,184 50,164 C 50,148 46,134 42,124 Z"
+                  fill={fill_of(fills, "biceps")} stroke=outline stroke-width="0.6"/>
+            <path d="M 166,128 C 172,150 170,180 162,206 C 154,202 150,184 150,164 C 150,148 154,134 158,124 Z"
+                  fill={fill_of(fills, "biceps")} stroke=outline stroke-width="0.6"/>
 
             // Abdominals
-            <path d="M 78,140 L 122,140 L 124,212 Q 100,220 76,212 Z"
-                  fill={fill_of(fills, "abdominals")} stroke=outline stroke-width="0.8"/>
+            <path d="M 86,144 C 92,142 108,142 114,144 L 114,212 C 108,218 92,218 86,212 Z"
+                  fill={fill_of(fills, "abdominals")} stroke=outline stroke-width="0.6"/>
 
             // Quadriceps
-            <path d="M 64,266 L 92,266 L 96,360 L 70,360 Z"
-                  fill={fill_of(fills, "quadriceps")} stroke=outline stroke-width="0.8"/>
-            <path d="M 136,266 L 108,266 L 104,360 L 130,360 Z"
-                  fill={fill_of(fills, "quadriceps")} stroke=outline stroke-width="0.8"/>
+            <path d="M 64,278 C 60,310 60,344 66,374 C 78,372 88,372 92,368 C 92,338 92,308 90,278 Z"
+                  fill={fill_of(fills, "quadriceps")} stroke=outline stroke-width="0.6"/>
+            <path d="M 136,278 C 140,310 140,344 134,374 C 122,372 112,372 108,368 C 108,338 108,308 110,278 Z"
+                  fill={fill_of(fills, "quadriceps")} stroke=outline stroke-width="0.6"/>
 
-            // Adductors (inner thigh)
-            <path d="M 92,266 L 100,266 L 100,340 L 96,340 Z"
-                  fill={fill_of(fills, "adductors")} stroke=outline stroke-width="0.8"/>
-            <path d="M 108,266 L 100,266 L 100,340 L 104,340 Z"
-                  fill={fill_of(fills, "adductors")} stroke=outline stroke-width="0.8"/>
+            // Adductors (inner thigh slivers)
+            <path d="M 92,278 L 100,278 L 100,344 L 96,344 Z"
+                  fill={fill_of(fills, "adductors")} stroke=outline stroke-width="0.6"/>
+            <path d="M 108,278 L 100,278 L 100,344 L 104,344 Z"
+                  fill={fill_of(fills, "adductors")} stroke=outline stroke-width="0.6"/>
 
-            // Calves (visible from front as shin/calf sliver)
-            <path d="M 70,372 L 88,372 L 86,424 L 66,424 Z"
-                  fill={fill_of(fills, "calves")} stroke=outline stroke-width="0.8"/>
-            <path d="M 130,372 L 112,372 L 114,424 L 134,424 Z"
-                  fill={fill_of(fills, "calves")} stroke=outline stroke-width="0.8"/>
+            // Calves (front sliver)
+            <path d="M 70,386 C 70,406 72,420 76,432 C 84,432 90,428 92,418 C 90,402 88,392 86,384 Z"
+                  fill={fill_of(fills, "calves")} stroke=outline stroke-width="0.6"/>
+            <path d="M 130,386 C 130,406 128,420 124,432 C 116,432 110,428 108,418 C 110,402 112,392 114,384 Z"
+                  fill={fill_of(fills, "calves")} stroke=outline stroke-width="0.6"/>
 
             // Label
-            <text x="100" y="10" text-anchor="middle" font-size="10" fill="#a594cc" font-weight="600">"FRONT"</text>
+            <text x="100" y="466" text-anchor="middle" font-size="9" fill="#a594cc" font-weight="700" letter-spacing="0.15em">"FRONT"</text>
         </svg>
     }
 }
@@ -205,81 +207,82 @@ fn render_back(fills: &Fills) -> impl IntoView {
     view! {
         <svg class="body-svg" viewBox="-30 -10 260 480" xmlns="http://www.w3.org/2000/svg">
             // Silhouette base (same outline as front)
-            <circle cx="100" cy="30" r="22" fill="#2d2050" stroke=outline stroke-width="1.5"/>
-            <rect x="92" y="50" width="16" height="10" fill={fill_of(fills, "neck")} stroke=outline stroke-width="1"/>
+            <circle cx="100" cy="32" r="20" fill="#2d2050" stroke=outline stroke-width="1.5"/>
+            <path d="M 88,50 C 90,58 90,62 86,68 L 114,68 C 110,62 110,58 112,50 Z"
+                  fill={fill_of(fills, "neck")} stroke=outline stroke-width="1"/>
 
-            <path d="M 56,68 Q 100,58 144,68 L 158,98 L 154,200 L 138,260 L 62,260 L 46,200 L 42,98 Z"
+            <path d="M 86,68 C 70,68 56,76 50,90 C 44,108 44,128 46,150 C 48,176 50,196 56,214 C 62,234 64,250 60,266 C 70,270 86,272 100,272 C 114,272 130,270 140,266 C 136,250 138,234 144,214 C 150,196 152,176 154,150 C 156,128 156,108 150,90 C 144,76 130,68 114,68 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
 
-            <path d="M 42,98 L 22,150 L 18,210 L 32,212 L 44,170 L 50,118 Z"
+            <path d="M 50,90 C 38,108 30,138 26,170 C 24,188 26,202 30,212 C 38,210 44,200 46,186 C 50,162 52,138 54,118 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
-            <path d="M 158,98 L 178,150 L 182,210 L 168,212 L 156,170 L 150,118 Z"
+            <path d="M 150,90 C 162,108 170,138 174,170 C 176,188 174,202 170,212 C 162,210 156,200 154,186 C 150,162 148,138 146,118 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
 
-            <path d="M 18,210 L 14,280 L 26,290 L 36,220 Z"
+            <path d="M 30,212 C 26,236 22,266 20,290 C 28,294 36,290 38,278 C 42,256 44,234 44,214 Z"
                   fill={fill_of(fills, "forearms")} stroke=outline stroke-width="1"/>
-            <path d="M 182,210 L 186,280 L 174,290 L 164,220 Z"
+            <path d="M 170,212 C 174,236 178,266 180,290 C 172,294 164,290 162,278 C 158,256 156,234 156,214 Z"
                   fill={fill_of(fills, "forearms")} stroke=outline stroke-width="1"/>
 
-            <path d="M 62,260 L 86,260 L 96,360 L 86,430 L 60,432 L 56,360 Z"
+            <path d="M 60,266 C 56,300 56,340 60,378 C 62,404 64,420 66,432 C 76,434 88,432 92,428 C 96,408 96,378 98,344 C 98,316 96,290 96,272 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
-            <path d="M 138,260 L 114,260 L 104,360 L 114,430 L 140,432 L 144,360 Z"
+            <path d="M 140,266 C 144,300 144,340 140,378 C 138,404 136,420 134,432 C 124,434 112,432 108,428 C 104,408 104,378 102,344 C 102,316 104,290 104,272 Z"
                   fill="#2d2050" stroke=outline stroke-width="1.5"/>
 
             // ── Muscle regions (back) ──────────────────────────────────
-            // Shoulders (rear delts)
-            <path d="M 46,72 Q 38,90 50,108 L 70,98 L 64,76 Z"
-                  fill={fill_of(fills, "shoulders")} stroke=outline stroke-width="0.8"/>
-            <path d="M 154,72 Q 162,90 150,108 L 130,98 L 136,76 Z"
-                  fill={fill_of(fills, "shoulders")} stroke=outline stroke-width="0.8"/>
-
             // Traps
-            <path d="M 78,68 Q 100,62 122,68 L 116,108 L 100,114 L 84,108 Z"
-                  fill={fill_of(fills, "traps")} stroke=outline stroke-width="0.8"/>
+            <path d="M 78,68 C 88,62 112,62 122,68 C 118,84 110,98 100,114 C 90,98 82,84 78,68 Z"
+                  fill={fill_of(fills, "traps")} stroke=outline stroke-width="0.6"/>
+
+            // Shoulders (rear delts)
+            <path d="M 50,90 C 44,100 42,114 46,124 C 58,122 68,112 70,98 Z"
+                  fill={fill_of(fills, "shoulders")} stroke=outline stroke-width="0.6"/>
+            <path d="M 150,90 C 156,100 158,114 154,124 C 142,122 132,112 130,98 Z"
+                  fill={fill_of(fills, "shoulders")} stroke=outline stroke-width="0.6"/>
 
             // Middle back (upper)
-            <path d="M 70,110 L 130,110 L 126,150 L 74,150 Z"
-                  fill={fill_of(fills, "middle back")} stroke=outline stroke-width="0.8"/>
+            <path d="M 76,108 C 92,104 108,104 124,108 C 124,128 124,140 122,148 C 108,152 92,152 78,148 C 76,140 76,128 76,108 Z"
+                  fill={fill_of(fills, "middle back")} stroke=outline stroke-width="0.6"/>
 
             // Lats
-            <path d="M 60,116 Q 50,150 56,196 L 84,190 L 82,116 Z"
-                  fill={fill_of(fills, "lats")} stroke=outline stroke-width="0.8"/>
-            <path d="M 140,116 Q 150,150 144,196 L 116,190 L 118,116 Z"
-                  fill={fill_of(fills, "lats")} stroke=outline stroke-width="0.8"/>
+            <path d="M 62,116 C 52,138 50,170 58,200 C 70,196 80,188 84,176 C 86,160 86,138 84,118 Z"
+                  fill={fill_of(fills, "lats")} stroke=outline stroke-width="0.6"/>
+            <path d="M 138,116 C 148,138 150,170 142,200 C 130,196 120,188 116,176 C 114,160 114,138 116,118 Z"
+                  fill={fill_of(fills, "lats")} stroke=outline stroke-width="0.6"/>
 
             // Lower back
-            <path d="M 76,180 L 124,180 L 130,220 L 70,220 Z"
-                  fill={fill_of(fills, "lower back")} stroke=outline stroke-width="0.8"/>
+            <path d="M 78,196 C 92,194 108,194 122,196 C 124,210 126,222 126,232 C 108,236 92,236 74,232 C 74,222 76,210 78,196 Z"
+                  fill={fill_of(fills, "lower back")} stroke=outline stroke-width="0.6"/>
 
             // Triceps
-            <path d="M 28,128 Q 22,156 32,200 L 46,196 Q 52,160 46,128 Z"
-                  fill={fill_of(fills, "triceps")} stroke=outline stroke-width="0.8"/>
-            <path d="M 172,128 Q 178,156 168,200 L 154,196 Q 148,160 154,128 Z"
-                  fill={fill_of(fills, "triceps")} stroke=outline stroke-width="0.8"/>
+            <path d="M 34,128 C 28,150 30,180 38,206 C 46,202 50,184 50,164 C 50,148 46,134 42,124 Z"
+                  fill={fill_of(fills, "triceps")} stroke=outline stroke-width="0.6"/>
+            <path d="M 166,128 C 172,150 170,180 162,206 C 154,202 150,184 150,164 C 150,148 154,134 158,124 Z"
+                  fill={fill_of(fills, "triceps")} stroke=outline stroke-width="0.6"/>
 
             // Glutes
-            <path d="M 62,228 Q 84,224 100,232 Q 116,224 138,228 L 134,272 Q 100,282 66,272 Z"
-                  fill={fill_of(fills, "glutes")} stroke=outline stroke-width="0.8"/>
+            <path d="M 62,236 C 76,232 90,234 100,242 C 110,234 124,232 138,236 C 138,256 130,270 116,276 C 104,278 96,278 84,276 C 70,270 62,256 62,236 Z"
+                  fill={fill_of(fills, "glutes")} stroke=outline stroke-width="0.6"/>
 
-            // Abductors (outer hip — slivers at glute sides)
-            <path d="M 62,228 L 60,260 L 56,260 L 56,232 Z"
-                  fill={fill_of(fills, "abductors")} stroke=outline stroke-width="0.8"/>
-            <path d="M 138,228 L 140,260 L 144,260 L 144,232 Z"
-                  fill={fill_of(fills, "abductors")} stroke=outline stroke-width="0.8"/>
+            // Abductors (outer hip slivers)
+            <path d="M 60,236 L 58,266 L 54,266 L 56,238 Z"
+                  fill={fill_of(fills, "abductors")} stroke=outline stroke-width="0.6"/>
+            <path d="M 140,236 L 142,266 L 146,266 L 144,238 Z"
+                  fill={fill_of(fills, "abductors")} stroke=outline stroke-width="0.6"/>
 
             // Hamstrings
-            <path d="M 64,275 L 92,275 L 96,360 L 70,360 Z"
-                  fill={fill_of(fills, "hamstrings")} stroke=outline stroke-width="0.8"/>
-            <path d="M 136,275 L 108,275 L 104,360 L 130,360 Z"
-                  fill={fill_of(fills, "hamstrings")} stroke=outline stroke-width="0.8"/>
+            <path d="M 64,278 C 60,310 60,344 66,374 C 78,372 88,372 92,368 C 92,338 92,308 90,278 Z"
+                  fill={fill_of(fills, "hamstrings")} stroke=outline stroke-width="0.6"/>
+            <path d="M 136,278 C 140,310 140,344 134,374 C 122,372 112,372 108,368 C 108,338 108,308 110,278 Z"
+                  fill={fill_of(fills, "hamstrings")} stroke=outline stroke-width="0.6"/>
 
             // Calves
-            <path d="M 70,372 L 88,372 L 86,424 L 66,424 Z"
-                  fill={fill_of(fills, "calves")} stroke=outline stroke-width="0.8"/>
-            <path d="M 130,372 L 112,372 L 114,424 L 134,424 Z"
-                  fill={fill_of(fills, "calves")} stroke=outline stroke-width="0.8"/>
+            <path d="M 70,386 C 70,406 72,420 76,432 C 84,432 90,428 92,418 C 90,402 88,392 86,384 Z"
+                  fill={fill_of(fills, "calves")} stroke=outline stroke-width="0.6"/>
+            <path d="M 130,386 C 130,406 128,420 124,432 C 116,432 110,428 108,418 C 110,402 112,392 114,384 Z"
+                  fill={fill_of(fills, "calves")} stroke=outline stroke-width="0.6"/>
 
-            <text x="100" y="10" text-anchor="middle" font-size="10" fill="#a594cc" font-weight="600">"BACK"</text>
+            <text x="100" y="466" text-anchor="middle" font-size="9" fill="#a594cc" font-weight="700" letter-spacing="0.15em">"BACK"</text>
         </svg>
     }
 }
