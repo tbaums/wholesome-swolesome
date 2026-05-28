@@ -1,7 +1,10 @@
+pub mod app;
 pub mod coach;
+pub mod components;
 pub mod csv_utils;
 pub mod library;
 pub mod models;
+pub mod storage;
 pub mod sync;
 
 #[cfg(test)]

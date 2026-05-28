@@ -436,3 +436,181 @@ pub fn current_datetime() -> String {
         .as_string()
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{ScheduledExercise, WorkoutSource};
+    use wasm_bindgen_test::*;
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    fn sched_workout(exs: Vec<ScheduledExercise>) -> ScheduledWorkout {
+        ScheduledWorkout {
+            id: "w1".into(),
+            date: "2026-05-28".into(),
+            name: "Test Day".into(),
+            rationale: String::new(),
+            source: WorkoutSource::Manual,
+            exercises: exs,
+            created_at: String::new(),
+        }
+    }
+
+    fn sched_ex(library_id: Option<&str>, name: &str, target_sets: u32) -> ScheduledExercise {
+        ScheduledExercise {
+            library_id: library_id.map(String::from),
+            name: name.into(),
+            target_sets,
+            reps_min: 8,
+            reps_max: 12,
+            rest_seconds: 90,
+            notes: None,
+            target_duration_seconds: None,
+        }
+    }
+
+    fn set(n: u32, weight: f32, reps: u32, completed: bool) -> SetLog {
+        SetLog {
+            set_number: n,
+            reps,
+            weight,
+            completed,
+            completed_date: None,
+            duration_seconds: None,
+        }
+    }
+
+    fn entry(
+        exercise_id: &str,
+        exercise_name: &str,
+        date: &str,
+        sets: Vec<SetLog>,
+    ) -> ExerciseEntry {
+        ExerciseEntry {
+            id: format!("e-{date}-{exercise_id}"),
+            date: date.into(),
+            exercise_name: exercise_name.into(),
+            exercise_id: exercise_id.into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: sets.len() as u32,
+            reps_min: 8,
+            reps_max: 12,
+            sets,
+            finalized: true,
+            created_at: String::new(),
+            target_duration_seconds: None,
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn prefill_uses_matching_set_number_per_set() {
+        let history = vec![entry(
+            "Barbell_Bench_Press_-_Medium_Grip",
+            "Bench Press",
+            "2026-05-20",
+            vec![
+                set(1, 135.0, 10, true),
+                set(2, 145.0, 8, true),
+                set(3, 155.0, 6, true),
+            ],
+        )];
+        let workout = sched_workout(vec![sched_ex(
+            Some("Barbell_Bench_Press_-_Medium_Grip"),
+            "Bench Press",
+            3,
+        )]);
+
+        let session = new_session_from_scheduled(&workout, &history);
+        let sets = &session.exercise_logs[0].sets;
+
+        assert_eq!(sets[0].weight, 135.0);
+        assert_eq!(sets[0].reps, 10);
+        assert_eq!(sets[1].weight, 145.0);
+        assert_eq!(sets[1].reps, 8);
+        assert_eq!(sets[2].weight, 155.0);
+        assert_eq!(sets[2].reps, 6);
+    }
+
+    #[wasm_bindgen_test]
+    fn prefill_falls_back_to_last_prior_set_when_target_has_more_sets() {
+        let history = vec![entry(
+            "Barbell_Squat",
+            "Squat",
+            "2026-05-20",
+            vec![set(1, 185.0, 5, true), set(2, 205.0, 5, true)],
+        )];
+        // Asking for 4 sets but only 2 were logged previously.
+        let workout = sched_workout(vec![sched_ex(Some("Barbell_Squat"), "Squat", 4)]);
+
+        let session = new_session_from_scheduled(&workout, &history);
+        let sets = &session.exercise_logs[0].sets;
+
+        assert_eq!(sets[0].weight, 185.0);
+        assert_eq!(sets[1].weight, 205.0);
+        // Sets 3 and 4 inherit from the last prior set (205 × 5).
+        assert_eq!(sets[2].weight, 205.0);
+        assert_eq!(sets[2].reps, 5);
+        assert_eq!(sets[3].weight, 205.0);
+        assert_eq!(sets[3].reps, 5);
+    }
+
+    #[wasm_bindgen_test]
+    fn prefill_defaults_to_zero_weight_and_reps_min_when_no_history() {
+        let workout = sched_workout(vec![sched_ex(Some("Deadlift"), "Deadlift", 3)]);
+
+        let session = new_session_from_scheduled(&workout, &[]);
+        let sets = &session.exercise_logs[0].sets;
+
+        for s in sets {
+            assert_eq!(s.weight, 0.0);
+            assert_eq!(s.reps, 8); // reps_min from sched_ex helper
+            assert!(!s.completed);
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn prefill_ignores_uncompleted_prior_sets() {
+        let history = vec![entry(
+            "Row",
+            "Row",
+            "2026-05-20",
+            vec![
+                set(1, 95.0, 10, true),
+                set(2, 105.0, 8, true),
+                set(3, 115.0, 6, false), // missed top set — excluded
+            ],
+        )];
+        let workout = sched_workout(vec![sched_ex(None, "Row", 3)]);
+
+        let session = new_session_from_scheduled(&workout, &history);
+        let sets = &session.exercise_logs[0].sets;
+
+        assert_eq!(sets[0].weight, 95.0);
+        assert_eq!(sets[1].weight, 105.0);
+        // Set 3 should fall back to the last *completed* prior set (set 2: 105 × 8),
+        // not the missed 115 × 6.
+        assert_eq!(sets[2].weight, 105.0);
+        assert_eq!(sets[2].reps, 8);
+    }
+
+    #[wasm_bindgen_test]
+    fn prefill_matches_by_library_id_when_present() {
+        // History has an entry whose name doesn't match but whose library_id does.
+        let history = vec![entry(
+            "Barbell_Bench_Press_-_Medium_Grip",
+            "Whatever The User Renamed It",
+            "2026-05-20",
+            vec![set(1, 200.0, 5, true)],
+        )];
+        let workout = sched_workout(vec![sched_ex(
+            Some("Barbell_Bench_Press_-_Medium_Grip"),
+            "Bench Press",
+            1,
+        )]);
+
+        let session = new_session_from_scheduled(&workout, &history);
+        assert_eq!(session.exercise_logs[0].sets[0].weight, 200.0);
+    }
+}
