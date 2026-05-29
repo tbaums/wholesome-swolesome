@@ -3,9 +3,9 @@ use leptos::task::spawn_local;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::app::{current_date, current_datetime, build_synced_state, AppState, View};
-use crate::coach::{build_coach_packet, parse_workout_response, PacketInput};
+use crate::coach::{apply_vitals_to_goals, build_coach_packet, parse_workout_response, PacketInput};
 use crate::csv_utils::download_file;
-use crate::models::{PrimaryGoal, EQUIPMENT_OPTIONS};
+use crate::models::{FocusLevel, PrimaryGoal, EQUIPMENT_OPTIONS};
 use crate::storage;
 use crate::sync::{self, SyncConfig, fetch_state, push_state};
 
@@ -161,6 +161,8 @@ pub fn OptionsView() -> impl IntoView {
             </div>
 
             <GoalsEditor/>
+
+            <CardioMobilityEditor/>
 
             <div class="card" style="margin-bottom:12px">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px">
@@ -453,6 +455,118 @@ fn GoalsEditor() -> impl IntoView {
     }
 }
 
+// ── Cardio & mobility editor ─────────────────────────────────────────────────
+
+#[component]
+fn CardioMobilityEditor() -> impl IntoView {
+    let state = expect_context::<AppState>();
+
+    let set_weekly_cardio = move |raw: String| {
+        let parsed: Option<u32> = if raw.trim().is_empty() {
+            None
+        } else {
+            raw.trim().parse().ok().or_else(|| state.goals.get_untracked().weekly_cardio_minutes_target)
+        };
+        state.goals.update(|g| g.weekly_cardio_minutes_target = parsed);
+    };
+
+    let set_vo2 = move |raw: String| {
+        let raw = raw.trim().to_string();
+        if raw.is_empty() {
+            state.goals.update(|g| {
+                g.vo2_max_latest = None;
+                g.vo2_max_updated = None;
+            });
+            return;
+        }
+        if let Ok(v) = raw.parse::<f32>() {
+            let today = current_date();
+            state.goals.update(|g| {
+                g.vo2_max_latest = Some(v);
+                g.vo2_max_updated = Some(today.clone());
+            });
+        }
+    };
+
+    let set_mobility = move |f: FocusLevel| state.goals.update(|g| g.mobility_focus = f);
+    let set_balance = move |f: FocusLevel| state.goals.update(|g| g.balance_focus = f);
+
+    view! {
+        <div class="card" style="margin-bottom:12px">
+            <div class="fw-600" style="margin-bottom:8px">"Cardio & mobility"</div>
+            <div class="text-muted text-sm" style="margin-bottom:10px">
+                "Optional. The coach plans cardio, mobility, and balance work against these."
+            </div>
+
+            <div style="display:flex; gap:8px; margin-bottom:14px">
+                <div style="flex:1">
+                    <label class="text-sm text-muted">"Weekly cardio minutes (target)"</label>
+                    <input
+                        type="number"
+                        min="0" max="600" step="5"
+                        class="input"
+                        placeholder="empty = no target"
+                        prop:value=move || state.goals.get().weekly_cardio_minutes_target
+                            .map(|n| n.to_string()).unwrap_or_default()
+                        on:change=move |e| set_weekly_cardio(event_target_value(&e))
+                    />
+                </div>
+                <div style="flex:1">
+                    <label class="text-sm text-muted">"VO2 max (latest)"</label>
+                    <input
+                        type="number"
+                        min="0" max="100" step="0.1"
+                        class="input"
+                        placeholder="e.g. 36.4"
+                        prop:value=move || state.goals.get().vo2_max_latest
+                            .map(|v| if v.fract() == 0.0 { format!("{:.0}", v) } else { format!("{:.1}", v) })
+                            .unwrap_or_default()
+                        on:change=move |e| set_vo2(event_target_value(&e))
+                    />
+                    <div class="text-muted text-sm" style="margin-top:4px">
+                        {move || match state.goals.get().vo2_max_updated {
+                            Some(d) => format!("Updated: {d}"),
+                            None => "Updated: —".to_string(),
+                        }}
+                    </div>
+                </div>
+            </div>
+
+            <label class="text-sm text-muted">"Mobility focus"</label>
+            <div style="margin-bottom:14px">
+                {FocusLevel::all().iter().copied().map(|f| {
+                    let active = move || state.goals.get().mobility_focus == f;
+                    view! {
+                        <span
+                            class="goal-pill"
+                            class:active=active
+                            on:click=move |_| set_mobility(f)
+                        >{f.label()}</span>
+                    }
+                }).collect_view()}
+            </div>
+
+            <label class="text-sm text-muted">"Balance focus"</label>
+            <div>
+                {FocusLevel::all().iter().copied().map(|f| {
+                    let active = move || state.goals.get().balance_focus == f;
+                    view! {
+                        <span
+                            class="goal-pill"
+                            class:active=active
+                            on:click=move |_| set_balance(f)
+                        >{f.label()}</span>
+                    }
+                }).collect_view()}
+            </div>
+
+            <div class="text-muted text-sm" style="margin-top:10px">
+                "Tip: paste an Apple Health VO2 max screenshot into Claude alongside the Coach Brief — Claude will extract the value into the import response."
+            </div>
+        </div>
+    }
+}
+
 // ── Coach packet view ────────────────────────────────────────────────────────
 
 #[component]
@@ -511,13 +625,26 @@ pub fn CoachPacketView() -> impl IntoView {
         let created = current_datetime();
         let library = state.library.get_untracked();
         match parse_workout_response(&text, &target, &created, &library) {
-            Ok(workout) => {
-                let label = workout.name.clone();
+            Ok(parsed) => {
+                let label = parsed.workout.name.clone();
                 state.scheduled_workouts.update(|v| {
                     v.retain(|w| w.date != target);
-                    v.push(workout);
+                    v.push(parsed.workout);
                 });
-                import_status.set(Some(format!("✓ Imported '{label}' for {target}")));
+                let mut vitals_msg = String::new();
+                if let Some(v) = parsed.vitals {
+                    let applied = {
+                        let mut applied = false;
+                        state.goals.update(|g| {
+                            applied = apply_vitals_to_goals(&v, g);
+                        });
+                        applied
+                    };
+                    if applied {
+                        vitals_msg = format!(" · VO2 max → {:.1} ({})", v.vo2_max, v.source_date);
+                    }
+                }
+                import_status.set(Some(format!("✓ Imported '{label}' for {target}{vitals_msg}")));
                 response_text.set(String::new());
                 state.show_toast("Workout added");
             }

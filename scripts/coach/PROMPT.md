@@ -44,7 +44,19 @@ If the file doesn't exist (404), abort — the user hasn't onboarded yet.
 {
   "schema_version": 2,
   "updated_at": "...",
-  "goals": { "primary_goal": "Hypertrophy", "sessions_per_week": 4, "session_minutes": 60, "equipment": ["barbell", "..."], "avoid": "", "notes": "" },
+  "goals": {
+    "primary_goal": "Hypertrophy",
+    "sessions_per_week": 4,
+    "session_minutes": 60,
+    "equipment": ["barbell", "..."],
+    "avoid": "",
+    "notes": "",
+    "weekly_cardio_minutes_target": 90,
+    "vo2_max_latest": 36.4,
+    "vo2_max_updated": "2026-05-27",
+    "mobility_focus": "Standard",
+    "balance_focus": "Standard"
+  },
   "scheduled_workouts": [ /* see step 4 */ ],
   "exercise_history": [ /* completed sets */ ],
   "session_drafts": [],
@@ -52,6 +64,8 @@ If the file doesn't exist (404), abort — the user hasn't onboarded yet.
   "plan": null
 }
 ```
+
+The cardio/mobility fields are all optional — older states may omit them. Treat missing as the defaults shown above (or as "no target / not provided" for the Option<…> ones).
 
 ## Step 2 — Read library
 
@@ -106,21 +120,29 @@ Apply these rules:
 - **Equipment**: only prescribe exercises whose `equipment` value is in `goals.equipment`.
   If `goals.equipment` is empty, assume full commercial gym (all values OK).
 - **Constraints**: respect `goals.avoid` — never schedule lifts the user explicitly excluded.
-- **Stretching (every session)**: Include 3-5 stretching exercises at the end of every
-  workout as a cooldown block. Target muscles worked during that session, plus any muscles
-  in the `15+ / never` bucket. Prescribe `target_sets: 2`, `reps_min: 1`, `reps_max: 1`,
-  `target_duration_seconds: 30` (a 30-second hold, 2 sets). Use `rest_seconds: 10`.
-- **Balance (2-3 sessions per week)**: Include 2-3 balance exercises per session, placed
-  after main strength work and before stretching. For timed holds: `target_sets: 2-3`,
-  `reps_min: 1`, `reps_max: 1`, `target_duration_seconds: 20-45`. For rep-based balance
-  drills: use normal `reps_min`/`reps_max` (e.g. 8-12 per side), omit
-  `target_duration_seconds`.
+- **Stretching** — read `goals.mobility_focus`. **High**: 5-7 stretches per session.
+  **Standard** (default): 3-5 stretches. **Low**: 0-2 stretches. Always prioritize
+  muscles in the `15+ / never` recovery bucket plus the ones hit during this session.
+  Prescribe `target_sets: 2`, `reps_min: 1`, `reps_max: 1`, `target_duration_seconds: 30`,
+  `rest_seconds: 10`.
+- **Balance** — read `goals.balance_focus`. **High**: 3+ balance drills every session.
+  **Standard** (default): 2-3 drills, 2-3 sessions/week. **Low**: skip unless a critical
+  muscle group is stale. For timed holds: `target_sets: 2-3`, `reps_min: 1`, `reps_max: 1`,
+  `target_duration_seconds: 20-45`. For rep-based drills: normal `reps_min`/`reps_max`
+  (e.g. 8-12 per side), omit `target_duration_seconds`.
+- **Cardio** — if `goals.weekly_cardio_minutes_target` is set and the user is short of it
+  for the rolling 7-day window (compute from `exercise_history` entries whose library
+  `category` is `cardio` — `reps` stores minutes), include a cardio exercise sized to close
+  the gap. Use `target_sets: 1`, set `reps_min`/`reps_max` to the planned minutes, and
+  set the implicit `weight` field to an RPE 1-10 (the app shows this as "RPE" for cardio
+  exercises). Apply progressive overload to cardio too: if the prior cardio session was
+  completed cleanly, bump minutes ~5-10% or RPE one notch.
 - **Session time budget**: Reserve ~5 min for the cooldown stretch block and ~5 min for
-  balance work when included. Subtract from `session_minutes` before budgeting strength
-  sets.
+  balance work when included. If cardio is included, budget its minutes explicitly. Subtract
+  all of these from `session_minutes` before budgeting strength sets.
 - **Order**: compounds before isolations. Heaviest/most-demanding first. Balance work
-  after main lifts. Stretching last (cooldown). Cardio before or after balance depending
-  on goal.
+  after main lifts. Stretching last (cooldown). Cardio either as a warm-up (zone 2, before
+  strength) or finisher (after strength, before cooldown).
 
 ## Step 5 — Write the workout
 

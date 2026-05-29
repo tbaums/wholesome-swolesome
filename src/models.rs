@@ -53,6 +53,20 @@ pub struct UserGoals {
     pub avoid: String,
     /// Free text: anything else the coach should know.
     pub notes: String,
+    /// Target aerobic minutes per week (sum of cardio session durations).
+    /// None = no target set; coach falls back to generic prescription based on primary_goal.
+    #[serde(default)]
+    pub weekly_cardio_minutes_target: Option<u32>,
+    /// Most recent VO2 max reading, manually entered or imported from an Apple Health screenshot.
+    #[serde(default)]
+    pub vo2_max_latest: Option<f32>,
+    /// YYYY-MM-DD the VO2 max reading is from. Used to drop stale imports.
+    #[serde(default)]
+    pub vo2_max_updated: Option<String>,
+    #[serde(default)]
+    pub mobility_focus: FocusLevel,
+    #[serde(default)]
+    pub balance_focus: FocusLevel,
 }
 
 impl Default for UserGoals {
@@ -64,7 +78,33 @@ impl Default for UserGoals {
             equipment: vec![],
             avoid: String::new(),
             notes: String::new(),
+            weekly_cardio_minutes_target: None,
+            vo2_max_latest: None,
+            vo2_max_updated: None,
+            mobility_focus: FocusLevel::default(),
+            balance_focus: FocusLevel::default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum FocusLevel {
+    Low,
+    #[default]
+    Standard,
+    High,
+}
+
+impl FocusLevel {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Low => "Low",
+            Self::Standard => "Standard",
+            Self::High => "High",
+        }
+    }
+    pub fn all() -> &'static [FocusLevel] {
+        &[Self::Low, Self::Standard, Self::High]
     }
 }
 

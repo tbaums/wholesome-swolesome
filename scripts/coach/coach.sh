@@ -110,11 +110,39 @@ jq --arg id "$UUID" --arg date "$WS_TARGET_DATE" --arg ts "$NOW" \
     created_at: $ts
   }' "$RESPONSE" > "$TMP/workout.json"
 
-jq --slurpfile w "$TMP/workout.json" --arg date "$WS_TARGET_DATE" --arg ts "$NOW" \
-  '.scheduled_workouts = ((.scheduled_workouts // []) | map(select(.date != $date)) + $w)
-   | .updated_at = $ts
-   | .schema_version = 2' \
-  "$TMP/state.json" > "$TMP/state.next.json"
+# ── Extract optional vitals block ────────────────────────────────────────────
+VITALS_VO2=$(jq -r '.vitals.vo2_max // empty' "$RESPONSE")
+VITALS_DATE=$(jq -r '.vitals.source_date // empty' "$RESPONSE")
+EXISTING_VO2_DATE=$(jq -r '.goals.vo2_max_updated // empty' "$TMP/state.json")
+
+if [ -n "$VITALS_VO2" ] && [ -n "$VITALS_DATE" ]; then
+  if [ -z "$EXISTING_VO2_DATE" ] || [[ "$VITALS_DATE" > "$EXISTING_VO2_DATE" ]]; then
+    echo "[coach] applying vitals: VO2 max=$VITALS_VO2 (date=$VITALS_DATE)"
+    APPLY_VITALS=1
+  else
+    echo "[coach] dropping stale vitals: source_date=$VITALS_DATE <= existing=$EXISTING_VO2_DATE"
+    APPLY_VITALS=0
+  fi
+else
+  APPLY_VITALS=0
+fi
+
+if [ "$APPLY_VITALS" = "1" ]; then
+  jq --slurpfile w "$TMP/workout.json" --arg date "$WS_TARGET_DATE" --arg ts "$NOW" \
+     --argjson vo2 "$VITALS_VO2" --arg vo2date "$VITALS_DATE" \
+    '.scheduled_workouts = ((.scheduled_workouts // []) | map(select(.date != $date)) + $w)
+     | .goals.vo2_max_latest = $vo2
+     | .goals.vo2_max_updated = $vo2date
+     | .updated_at = $ts
+     | .schema_version = 2' \
+    "$TMP/state.json" > "$TMP/state.next.json"
+else
+  jq --slurpfile w "$TMP/workout.json" --arg date "$WS_TARGET_DATE" --arg ts "$NOW" \
+    '.scheduled_workouts = ((.scheduled_workouts // []) | map(select(.date != $date)) + $w)
+     | .updated_at = $ts
+     | .schema_version = 2' \
+    "$TMP/state.json" > "$TMP/state.next.json"
+fi
 
 CONTENT=$(base64 < "$TMP/state.next.json" | tr -d '\n')
 SHA=$(cat "$TMP/state.sha")

@@ -97,6 +97,41 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    fn user_goals_pre_cardio_fields_deserialize_with_defaults() {
+        // State written before the cardio/mobility fields existed — must still load.
+        let json = r#"{
+            "primary_goal":"Hypertrophy","sessions_per_week":4,"session_minutes":60,
+            "equipment":["barbell"],"avoid":"none","notes":""
+        }"#;
+        let goals: UserGoals = serde_json::from_str(json).unwrap();
+        assert!(goals.weekly_cardio_minutes_target.is_none());
+        assert!(goals.vo2_max_latest.is_none());
+        assert!(goals.vo2_max_updated.is_none());
+        assert_eq!(goals.mobility_focus, crate::models::FocusLevel::Standard);
+        assert_eq!(goals.balance_focus, crate::models::FocusLevel::Standard);
+    }
+
+    #[wasm_bindgen_test]
+    fn user_goals_round_trip_preserves_cardio_fields() {
+        let g = UserGoals {
+            weekly_cardio_minutes_target: Some(120),
+            vo2_max_latest: Some(36.4),
+            vo2_max_updated: Some("2026-05-27".into()),
+            mobility_focus: crate::models::FocusLevel::High,
+            balance_focus: crate::models::FocusLevel::Low,
+            ..UserGoals::default()
+        };
+
+        let json = serde_json::to_string(&g).unwrap();
+        let parsed: UserGoals = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.weekly_cardio_minutes_target, Some(120));
+        assert_eq!(parsed.vo2_max_latest, Some(36.4));
+        assert_eq!(parsed.vo2_max_updated.as_deref(), Some("2026-05-27"));
+        assert_eq!(parsed.mobility_focus, crate::models::FocusLevel::High);
+        assert_eq!(parsed.balance_focus, crate::models::FocusLevel::Low);
+    }
+
+    #[wasm_bindgen_test]
     fn scheduled_workout_round_trips() {
         let mut state = empty_state("2026-05-22T00:00:00.000Z");
         state.scheduled_workouts.push(ScheduledWorkout {
@@ -318,13 +353,14 @@ mod tests {
                  "target_sets":4,"reps_min":6,"reps_max":8,"rest_seconds":180,"notes":null}
             ]
         }"#;
-        let w = crate::coach::parse_workout_response(json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib)
+        let p = crate::coach::parse_workout_response(json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib)
             .expect("valid id should pass");
-        assert_eq!(w.exercises.len(), 1);
+        assert_eq!(p.workout.exercises.len(), 1);
         assert_eq!(
-            w.exercises[0].library_id.as_deref(),
+            p.workout.exercises[0].library_id.as_deref(),
             Some("Barbell_Bench_Press_-_Medium_Grip")
         );
+        assert!(p.vitals.is_none());
     }
 
     #[wasm_bindgen_test]
@@ -591,11 +627,11 @@ mod tests {
                  "rest_seconds":10,"notes":"Hold each side 30s"}
             ]
         }"#;
-        let w = crate::coach::parse_workout_response(json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib)
+        let p = crate::coach::parse_workout_response(json, "2026-05-25", "2026-05-24T00:00:00.000Z", &lib)
             .expect("stretching exercise with duration should pass");
-        assert_eq!(w.exercises.len(), 2);
-        assert_eq!(w.exercises[1].target_duration_seconds, Some(30));
-        assert!(w.exercises[0].target_duration_seconds.is_none());
+        assert_eq!(p.workout.exercises.len(), 2);
+        assert_eq!(p.workout.exercises[1].target_duration_seconds, Some(30));
+        assert!(p.workout.exercises[0].target_duration_seconds.is_none());
     }
 
     #[wasm_bindgen_test]
@@ -623,6 +659,236 @@ mod tests {
             packet.contains("target_duration_seconds"),
             "coach packet should reference target_duration_seconds field"
         );
+    }
+
+    // ── Coach: cardio + mobility integration ─────────────────────────────────
+
+    #[wasm_bindgen_test]
+    fn parse_workout_extracts_vitals_when_present() {
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let json = r#"{
+            "name":"Push","exercises":[
+                {"library_id":"Barbell_Bench_Press_-_Medium_Grip","name":"Bench Press",
+                 "target_sets":3,"reps_min":6,"reps_max":8,"rest_seconds":120,"notes":null}
+            ],
+            "vitals":{"vo2_max":36.4,"source_date":"2026-05-27"}
+        }"#;
+        let p = crate::coach::parse_workout_response(json, "2026-05-28", "2026-05-27T22:00:00.000Z", &lib)
+            .expect("vitals + workout should parse");
+        let v = p.vitals.expect("vitals should be Some");
+        assert_eq!(v.vo2_max, 36.4);
+        assert_eq!(v.source_date, "2026-05-27");
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_workout_omits_vitals_when_absent() {
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let json = r#"{
+            "name":"Push","exercises":[
+                {"library_id":"Barbell_Bench_Press_-_Medium_Grip","name":"Bench Press",
+                 "target_sets":3,"reps_min":6,"reps_max":8,"rest_seconds":120,"notes":null}
+            ]
+        }"#;
+        let p = crate::coach::parse_workout_response(json, "2026-05-28", "2026-05-27T22:00:00.000Z", &lib)
+            .expect("no-vitals response should still parse");
+        assert!(p.vitals.is_none(), "missing vitals block should yield None");
+    }
+
+    #[wasm_bindgen_test]
+    fn apply_vitals_updates_when_newer() {
+        use crate::coach::{apply_vitals_to_goals, Vitals};
+        let mut goals = UserGoals {
+            vo2_max_latest: Some(34.0),
+            vo2_max_updated: Some("2026-05-20".into()),
+            ..UserGoals::default()
+        };
+        let applied = apply_vitals_to_goals(
+            &Vitals { vo2_max: 36.4, source_date: "2026-05-27".into() },
+            &mut goals,
+        );
+        assert!(applied);
+        assert_eq!(goals.vo2_max_latest, Some(36.4));
+        assert_eq!(goals.vo2_max_updated.as_deref(), Some("2026-05-27"));
+    }
+
+    #[wasm_bindgen_test]
+    fn apply_vitals_drops_stale_silently() {
+        use crate::coach::{apply_vitals_to_goals, Vitals};
+        let mut goals = UserGoals {
+            vo2_max_latest: Some(36.4),
+            vo2_max_updated: Some("2026-05-27".into()),
+            ..UserGoals::default()
+        };
+        let applied = apply_vitals_to_goals(
+            &Vitals { vo2_max: 34.0, source_date: "2026-05-14".into() },
+            &mut goals,
+        );
+        assert!(!applied, "older source_date should not overwrite");
+        assert_eq!(goals.vo2_max_latest, Some(36.4));
+        assert_eq!(goals.vo2_max_updated.as_deref(), Some("2026-05-27"));
+    }
+
+    #[wasm_bindgen_test]
+    fn apply_vitals_drops_equal_date_silently() {
+        // Same-day re-import should not bump (no new information).
+        use crate::coach::{apply_vitals_to_goals, Vitals};
+        let mut goals = UserGoals {
+            vo2_max_latest: Some(36.4),
+            vo2_max_updated: Some("2026-05-27".into()),
+            ..UserGoals::default()
+        };
+        let applied = apply_vitals_to_goals(
+            &Vitals { vo2_max: 99.0, source_date: "2026-05-27".into() },
+            &mut goals,
+        );
+        assert!(!applied);
+        assert_eq!(goals.vo2_max_latest, Some(36.4));
+    }
+
+    #[wasm_bindgen_test]
+    fn apply_vitals_applies_when_no_prior_value() {
+        use crate::coach::{apply_vitals_to_goals, Vitals};
+        let mut goals = UserGoals::default();
+        let applied = apply_vitals_to_goals(
+            &Vitals { vo2_max: 36.4, source_date: "2026-05-27".into() },
+            &mut goals,
+        );
+        assert!(applied);
+        assert_eq!(goals.vo2_max_latest, Some(36.4));
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_minutes_sums_completed_cardio_in_window() {
+        use crate::coach::cardio_minutes_in_window;
+        let lib = vec![
+            lib_entry_with_cat("Jogging_Treadmill", "Jogging, Treadmill", "cardio"),
+            lib_entry("Barbell_Squat", "Squat"),
+        ];
+        let cardio_entry = ExerciseEntry {
+            id: "c1".into(),
+            date: "2026-05-26".into(),
+            exercise_name: "Jogging, Treadmill".into(),
+            exercise_id: "Jogging_Treadmill".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 1,
+            reps_min: 20,
+            reps_max: 40,
+            sets: vec![
+                crate::models::SetLog { set_number: 1, reps: 30, weight: 6.0, completed: true, completed_date: None, duration_seconds: None },
+                crate::models::SetLog { set_number: 2, reps: 99, weight: 9.0, completed: false, completed_date: None, duration_seconds: None },
+            ],
+            finalized: true,
+            created_at: "2026-05-26T10:00:00.000Z".into(),
+            target_duration_seconds: None,
+        };
+        // Strength entry — should be ignored entirely
+        let strength_entry = ExerciseEntry {
+            id: "s1".into(),
+            date: "2026-05-26".into(),
+            exercise_name: "Squat".into(),
+            exercise_id: "Barbell_Squat".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 3,
+            reps_min: 5,
+            reps_max: 5,
+            sets: vec![crate::models::SetLog { set_number: 1, reps: 5, weight: 225.0, completed: true, completed_date: None, duration_seconds: None }],
+            finalized: true,
+            created_at: "2026-05-26T10:30:00.000Z".into(),
+            target_duration_seconds: None,
+        };
+        // Old cardio entry — outside the 7d window
+        let mut old_cardio = cardio_entry.clone();
+        old_cardio.id = "c0".into();
+        old_cardio.date = "2026-05-15".into();
+        old_cardio.sets[0].reps = 1000; // would dominate the sum if it counted
+
+        let history = vec![cardio_entry, strength_entry, old_cardio];
+        let total = cardio_minutes_in_window(&history, &lib, "2026-05-28", 7);
+        assert_eq!(total, 30, "only the in-window, completed cardio reps (minutes) should count");
+    }
+
+    #[wasm_bindgen_test]
+    fn last_stretched_credits_only_stretching_category() {
+        use crate::coach::last_stretched_by_muscle;
+        let mut hamstring_stretch = lib_entry_with_cat("Standing_Hamstring_Stretch", "Standing Hamstring Stretch", "stretching");
+        hamstring_stretch.primary_muscles = vec!["hamstrings".into()];
+        hamstring_stretch.secondary_muscles = vec![];
+        let mut squat = lib_entry_with_cat("Barbell_Squat", "Squat", "strength");
+        squat.primary_muscles = vec!["quadriceps".into()];
+        squat.secondary_muscles = vec!["hamstrings".into()]; // strength hits hamstrings but shouldn't count
+        let lib = vec![hamstring_stretch, squat];
+
+        let stretch_entry = ExerciseEntry {
+            id: "ss1".into(),
+            date: "2026-05-26".into(),
+            exercise_name: "Standing Hamstring Stretch".into(),
+            exercise_id: "Standing_Hamstring_Stretch".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 2, reps_min: 1, reps_max: 1,
+            sets: vec![crate::models::SetLog { set_number: 1, reps: 1, weight: 0.0, completed: true, completed_date: None, duration_seconds: Some(30) }],
+            finalized: true,
+            created_at: "2026-05-26T10:00:00.000Z".into(),
+            target_duration_seconds: Some(30),
+        };
+        let squat_entry = ExerciseEntry {
+            id: "sq1".into(),
+            date: "2026-05-27".into(),
+            exercise_name: "Squat".into(),
+            exercise_id: "Barbell_Squat".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 3, reps_min: 5, reps_max: 5,
+            sets: vec![crate::models::SetLog { set_number: 1, reps: 5, weight: 225.0, completed: true, completed_date: None, duration_seconds: None }],
+            finalized: true,
+            created_at: "2026-05-27T10:00:00.000Z".into(),
+            target_duration_seconds: None,
+        };
+
+        let stretched = last_stretched_by_muscle(&[stretch_entry, squat_entry], &lib);
+        // hamstrings was credited by the *stretching* entry (5/26), not the *strength* one (5/27)
+        assert_eq!(stretched.get("hamstrings").map(String::as_str), Some("2026-05-26"));
+        // quadriceps was only hit by strength — should not appear
+        assert!(!stretched.contains_key("quadriceps"));
+    }
+
+    #[wasm_bindgen_test]
+    fn coach_packet_includes_cardio_and_mobility_sections() {
+        use crate::coach::{build_coach_packet, PacketInput};
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let goals = UserGoals {
+            weekly_cardio_minutes_target: Some(90),
+            vo2_max_latest: Some(36.4),
+            vo2_max_updated: Some("2026-05-27".into()),
+            mobility_focus: crate::models::FocusLevel::High,
+            balance_focus: crate::models::FocusLevel::Low,
+            ..UserGoals::default()
+        };
+
+        let packet = build_coach_packet(PacketInput {
+            goals: &goals,
+            history: &[],
+            library: &lib,
+            scheduled: &[],
+            today: "2026-05-28",
+            target_date: "2026-05-29",
+        });
+
+        assert!(packet.contains("Cardio & mobility targets"), "should have the new section header");
+        assert!(packet.contains("Weekly cardio minutes target: **90**"), "should display target");
+        assert!(packet.contains("VO2 max: **36.4**"), "should display VO2 max");
+        assert!(packet.contains("2026-05-27"), "should display VO2 update date");
+        assert!(packet.contains("Mobility focus: **High**"), "should display mobility focus");
+        assert!(packet.contains("Balance focus: **Low**"), "should display balance focus");
+        assert!(packet.contains("Mobility recovery"), "should include mobility recovery table");
+        assert!(packet.contains("Apple Health"), "should include screenshot-attach tip");
+        assert!(packet.contains("\"vitals\""), "response format should show optional vitals block");
     }
 
     #[wasm_bindgen_test]
