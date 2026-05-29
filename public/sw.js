@@ -1,4 +1,4 @@
-const CACHE = "swolesome-v11";
+const CACHE = "swolesome-v12";
 
 const PRECACHE = [
   "./",
@@ -40,7 +40,11 @@ self.addEventListener("fetch", (e) => {
   // /data/* (exercise library + images): network-first, bypass the HTTP cache
   // so a stale entry from a broken earlier load can't poison us. Cache the
   // fresh response for offline; fall back to SW cache only when network fails.
-  if (url.pathname.startsWith("/data/")) {
+  //
+  // `includes` rather than `startsWith` because on GitHub Pages the app is
+  // served under a subpath (e.g. /wholesome-swolesome/data/…). The literal
+  // segment "/data/" remains unique to library + images either way.
+  if (url.pathname.includes("/data/")) {
     e.respondWith(
       fetch(request, { cache: "reload" })
         .then((response) => {
