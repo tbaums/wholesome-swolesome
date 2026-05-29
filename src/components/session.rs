@@ -303,17 +303,6 @@ fn ExerciseCard(
 fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
     let state = expect_context::<AppState>();
 
-    let weight = {
-        let ex_id = ex_id.clone();
-        move || {
-            state.active_session.get()
-                .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
-                .and_then(|e| e.sets.get(set_idx).cloned())
-                .map(|s| s.weight)
-                .unwrap_or(0.0)
-        }
-    };
-
     let reps = {
         let ex_id = ex_id.clone();
         move || {
@@ -347,10 +336,32 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         }
     };
 
+    // Initial weight string from current state. Read untracked: we only need
+    // the value once at component creation to seed the local input buffer.
+    let initial_weight = state.active_session.get_untracked()
+        .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
+        .and_then(|e| e.sets.get(set_idx).cloned())
+        .map(|s| s.weight)
+        .unwrap_or(0.0);
+    let initial_weight_str = if initial_weight == 0.0 {
+        String::new()
+    } else if initial_weight.fract() == 0.0 {
+        format!("{:.0}", initial_weight)
+    } else {
+        format!("{}", initial_weight)
+    };
+    // Local buffer for the weight/RPE input. Storing the user's raw typed
+    // string here (rather than reformatting from the f32 every keystroke)
+    // is what lets "12." pass through on the way to "12.5" — a reactive
+    // formatter would strip the trailing dot before the next keypress.
+    let weight_input: RwSignal<String> = RwSignal::new(initial_weight_str);
+
     let on_weight_change = {
         let ex_id = ex_id.clone();
         move |e| {
-            let val: f32 = event_target_value(&e).parse().unwrap_or(0.0);
+            let s = event_target_value(&e);
+            weight_input.set(s.clone());
+            let val: f32 = s.parse().unwrap_or(0.0);
             state.active_session.update(|opt| {
                 if let Some(s) = opt.as_mut() {
                     if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {
@@ -415,13 +426,10 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         }
     };
 
-    // Format weight: show integer if no fractional part
-    let weight_str = move || {
-        let w = weight();
-        if w == 0.0 { String::new() }
-        else if w.fract() == 0.0 { format!("{:.0}", w) }
-        else { format!("{:.1}", w) }
-    };
+    // Read the weight input's display string from the local buffer (set by
+    // on_weight_change). Reading the raw text the user typed — instead of
+    // reformatting from the parsed f32 — preserves trailing "." mid-typing.
+    let weight_str = move || weight_input.get();
 
     let reps_str = move || {
         let r = reps();
@@ -508,12 +516,17 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                         } else {
                             let weight_str = weight_str.clone();
                             let on_weight_change = on_weight_change.clone();
+                            // type="text" + inputmode="decimal": the browser
+                            // normalizes type=number's .value, stripping
+                            // partial input like "12." before the user can
+                            // finish typing "12.5". Text mode returns the
+                            // raw string; inputmode keeps the mobile decimal
+                            // keyboard.
                             view! {
                                 <input
-                                    type="number"
+                                    type="text"
                                     inputmode="decimal"
-                                    step="any"
-                                    min="0"
+                                    pattern="[0-9]*\\.?[0-9]*"
                                     class="set-num-input"
                                     placeholder="wt"
                                     prop:value=weight_str
