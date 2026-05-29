@@ -891,6 +891,67 @@ mod tests {
         assert!(packet.contains("\"vitals\""), "response format should show optional vitals block");
     }
 
+    // ── Home: completed-workout visibility ─────────────────────────────────────
+
+    fn history_entry_for_day(day_id: &str, completed: bool) -> ExerciseEntry {
+        ExerciseEntry {
+            id: format!("e-{day_id}"),
+            date: "2026-05-29".into(),
+            created_at: "2026-05-29T18:00:00.000Z".into(),
+            exercise_name: "Bench Press".into(),
+            exercise_id: "Barbell_Bench_Press_-_Medium_Grip".into(),
+            session_id: Some("sess-1".into()),
+            day_id: Some(day_id.into()),
+            day_name: Some("Push".into()),
+            target_sets: 3,
+            reps_min: 8,
+            reps_max: 12,
+            sets: vec![crate::models::SetLog {
+                set_number: 1,
+                reps: 10,
+                weight: 135.0,
+                completed,
+                completed_date: if completed { Some("2026-05-29".into()) } else { None },
+                duration_seconds: None,
+            }],
+            finalized: true,
+            target_duration_seconds: None,
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn is_workout_completed_true_with_matching_day_id_and_completed_set() {
+        use crate::components::home::is_workout_completed_in_history;
+        let history = vec![history_entry_for_day("w-today", true)];
+        assert!(is_workout_completed_in_history("w-today", &history));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_workout_completed_false_when_no_match() {
+        use crate::components::home::is_workout_completed_in_history;
+        let history = vec![history_entry_for_day("w-other", true)];
+        assert!(!is_workout_completed_in_history("w-today", &history));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_workout_completed_false_when_match_has_no_completed_sets() {
+        // History entry with day_id match but every set is incomplete should not count.
+        use crate::components::home::is_workout_completed_in_history;
+        let history = vec![history_entry_for_day("w-today", false)];
+        assert!(!is_workout_completed_in_history("w-today", &history));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_workout_completed_false_for_freeform_entries() {
+        // Freeform exercise entries have day_id: None and should never count toward
+        // "workout was completed."
+        use crate::components::home::is_workout_completed_in_history;
+        let mut e = history_entry_for_day("ignored", true);
+        e.day_id = None;
+        let history = vec![e];
+        assert!(!is_workout_completed_in_history("w-today", &history));
+    }
+
     #[wasm_bindgen_test]
     fn csv_export_includes_duration_column() {
         let entry = ExerciseEntry {

@@ -1,7 +1,18 @@
 use leptos::prelude::*;
 
 use crate::app::{current_date, new_session_from_scheduled, AppState, View};
-use crate::models::ScheduledWorkout;
+use crate::models::{ExerciseEntry, ScheduledWorkout};
+
+/// True if any history entry references this scheduled workout via day_id
+/// AND has at least one completed set. Used by Home to hide today's card
+/// once the workout has been logged, so the user is nudged to plan the next
+/// one rather than re-entering the same session.
+pub fn is_workout_completed_in_history(workout_id: &str, history: &[ExerciseEntry]) -> bool {
+    history.iter().any(|e| {
+        e.day_id.as_deref() == Some(workout_id)
+            && e.sets.iter().any(|s| s.completed)
+    })
+}
 
 #[component]
 pub fn HomeView() -> impl IntoView {
@@ -21,23 +32,46 @@ pub fn HomeView() -> impl IntoView {
 
 // ── Today's workout ──────────────────────────────────────────────────────────
 
+/// Lookup result for today's slot: a workout to run, a workout already done,
+/// or nothing planned at all.
+enum TodaySlot {
+    Pending(ScheduledWorkout),
+    Done(String), // completed workout name (for the "done" celebration)
+    Empty,
+}
+
 #[component]
 fn TodayCard() -> impl IntoView {
     let state = expect_context::<AppState>();
 
-    let today_workout = move || -> Option<ScheduledWorkout> {
+    let today_slot = move || -> TodaySlot {
         let today = current_date();
-        state
+        let history = state.history.get();
+        let today_scheduled = state
             .scheduled_workouts
             .get()
             .into_iter()
-            .find(|w| w.date == today)
+            .find(|w| w.date == today);
+        match today_scheduled {
+            Some(w) if is_workout_completed_in_history(&w.id, &history) => TodaySlot::Done(w.name),
+            Some(w) => TodaySlot::Pending(w),
+            None => TodaySlot::Empty,
+        }
     };
 
     view! {
-        {move || match today_workout() {
-            Some(w) => view! { <ScheduledCard workout=w label="TODAY"/> }.into_any(),
-            None => view! {
+        {move || match today_slot() {
+            TodaySlot::Pending(w) => view! { <ScheduledCard workout=w label="TODAY"/> }.into_any(),
+            TodaySlot::Done(name) => view! {
+                <div class="today-card">
+                    <span class="today-badge">"DONE"</span>
+                    <div class="today-title">"✓ " {name}</div>
+                    <div class="today-rationale">
+                        "Today's workout is logged. Generate tomorrow's now, or wait for the nightly coach run."
+                    </div>
+                </div>
+            }.into_any(),
+            TodaySlot::Empty => view! {
                 <div class="today-card">
                     <span class="today-badge">"TODAY"</span>
                     <div class="today-title">"No workout scheduled"</div>
