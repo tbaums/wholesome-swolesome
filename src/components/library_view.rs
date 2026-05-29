@@ -46,7 +46,7 @@ pub fn LibraryView() -> impl IntoView {
             .collect()
     };
 
-    let categories = ["strength", "cardio", "plyometrics", "stretching"];
+    let categories = ["strength", "cardio", "plyometrics", "stretching", "balance"];
     let equipments = ["barbell", "dumbbell", "machine", "cable", "body only", "kettlebells"];
 
     view! {

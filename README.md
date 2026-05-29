@@ -7,7 +7,7 @@ A mobile-first PWA workout tracker built in Rust + Leptos (WASM). Instead of han
 ## What's in the app
 
 - **Today** — the workout the coach has planned for today (generated locally, or imported from a nightly agent run)
-- **Library** — 133 exercises from [free-exercise-db](https://github.com/yuhonas/free-exercise-db) with photos, primary/secondary muscles, and a body silhouette per detail page
+- **Library** — 290 exercises (strength, cardio, plyometrics, stretching, balance) from [free-exercise-db](https://github.com/yuhonas/free-exercise-db) with photos, primary/secondary muscles, and a body silhouette per detail page
 - **Exercises** — freeform logging for anything not in a planned workout
 - **History** — a body heatmap colored by days-since-last-worked (≤3d / 4–7d / 8–14d / 15+) over a list of past sessions
 - **Options** — set your training goals (primary focus, sessions/week, session minutes, equipment, injuries/notes) and configure optional GitHub sync
