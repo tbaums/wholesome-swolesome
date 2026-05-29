@@ -1,26 +1,26 @@
 # Wholesome Swolesome 💪
 
-A mobile-first PWA workout tracker built in Rust + Leptos (WASM). Instead of hand-editing a static plan, you set training goals once and **Claude generates each day's workout** based on your goals, recent training history, and per-muscle recovery state.
+A mobile-first PWA workout tracker built in Rust + Leptos (WASM). Instead of hand-editing a static plan, you set training goals once and **Claude generates each day's workout** based on your goals, recent training history, per-muscle recovery state, cardio targets, and mobility focus.
 
-**Live app:** https://tbaums.github.io/wholesome-swolesome/
+**Live app:** https://tbaums.github.io/wholesome-swolesome/ · **Tour:** [docs/walkthrough.md](docs/walkthrough.md) — screenshots + the design choices, for sending to peers.
 
 ## What's in the app
 
-- **Today** — the workout the coach has planned for today (generated locally, or imported from a nightly agent run)
+- **Today** — the workout the coach has planned for today (generated locally, or imported from a nightly agent run); per-set inputs pre-fill from your last session
 - **Library** — 290 exercises (strength, cardio, plyometrics, stretching, balance) from [free-exercise-db](https://github.com/yuhonas/free-exercise-db) with photos, primary/secondary muscles, and a body silhouette per detail page
 - **Exercises** — freeform logging for anything not in a planned workout
-- **History** — a body heatmap colored by days-since-last-worked (≤3d / 4–7d / 8–14d / 15+) over a list of past sessions
-- **Options** — set your training goals (primary focus, sessions/week, session minutes, equipment, injuries/notes) and configure optional GitHub sync
+- **History** — a body heatmap colored by days-since-last-worked (≤3d / 4–7d / 8–14d / 15+) over a list of past sessions, with per-exercise progress views
+- **Options** — set your training goals (primary focus, sessions/week, session minutes, equipment, injuries/notes), cardio + mobility targets (weekly cardio minutes, latest VO2 max, mobility/balance focus), and configure optional GitHub sync
 
-All data lives in `localStorage`. There is no account and no backend. Optional GitHub sync persists state to a private repo so you can use the app across devices.
+**No backend, ever.** All data lives in `localStorage` (the source of truth) plus an optional `state.json` in a private GitHub repo you own. No server to maintain, no account to sign up for, no API key to store — the "database" is git. [See the walkthrough](docs/walkthrough.md#weird-choices-and-why) for the longer take.
 
 ## Using the app, end-to-end
 
-1. **Set your goals.** Open *Options* → fill in the *Training goals* card. Primary goal (hypertrophy / strength / fat loss / endurance / general), sessions per week, session minutes, available equipment, anything to avoid, freeform notes. These are what the coach plans against.
+1. **Set your goals.** Open *Options* → fill in the *Training goals* card (primary goal, sessions/week, session minutes, equipment, injuries, notes) and optionally the *Cardio & mobility* card (weekly cardio minutes target, latest VO2 max, mobility/balance focus). These are what the coach plans against.
 
 2. **Get tomorrow's workout.** There are two paths, designed to be interchangeable:
 
-   - **In-app, on demand.** On the Home tab tap *🧠 Generate workout with Claude*. The *Coach Brief* view renders a markdown packet (your goals + recent training + per-muscle recovery state + the library reference). Copy it, paste it into any Claude Code chat, copy Claude's JSON response back, paste it into the bottom textarea, and tap *Import workout*. The workout lands in your scheduled list for the date you picked.
+   - **In-app, on demand.** On the Home tab tap *🧠 Generate workout with Claude*. The *Coach Brief* view renders a markdown packet (your goals + cardio/mobility targets + recent training + per-muscle recovery + days-since-stretched + the library reference). Copy it, paste it into any Claude conversation (Claude Code, the Claude mobile app, claude.ai). Optionally paste an Apple Health VO2 max screenshot into the same conversation — Claude will extract the reading into a `vitals` block of the JSON response. Paste that response into the bottom textarea and tap *Import workout*; the workout is scheduled and your VO2 max is updated in one step.
    - **Nightly, unattended.** Run `scripts/coach/coach.sh` once to verify it works, then schedule it via Cowork to run every night. See [scripts/coach/README.md](scripts/coach/README.md) for the full setup, including the `/schedule` invocation. The nightly agent does the same flow as the in-app button, but writes the result back to your sync repo so the app picks it up next time it loads.
 
 3. **Run the workout.** On the Home tab, the *TODAY* card shows the scheduled workout. Tap *Start workout →* to enter the session view. Open each exercise's accordion, enter weight + reps for each set, tap ✓ to log it. The session auto-saves; you can close the browser mid-workout and resume.
