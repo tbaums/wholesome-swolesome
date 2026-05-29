@@ -50,6 +50,33 @@ test.describe('Decimal weight input', () => {
     await expect(weightInput).toHaveValue('137.5');
   });
 
+  // Regression guard: a reactive `prop:value` formatter used to strip the
+  // trailing "." while the user was mid-typing — `.fill()` doesn't catch that
+  // because it sets the value atomically, so this test types one character
+  // at a time the way a real keyboard does.
+  test('per-character typing of "12.5" preserves the decimal point', async ({ page }) => {
+    await enableDateMock(page, MOCK_NOW);
+    await page.goto(BASE);
+    await page.waitForSelector('.bottom-nav');
+    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(
+      (val) => localStorage.setItem('ws_scheduled_workouts', val),
+      JSON.stringify([scheduledWorkout(TODAY)]),
+    );
+    await page.goto(BASE);
+    await page.waitForSelector('.bottom-nav');
+
+    await page.locator('button').filter({ hasText: 'Start workout' }).click();
+    await page.waitForSelector('.ex-card');
+    await openExercise(page, 0);
+
+    const weightInput = page.locator('.set-row').first().locator('.set-num-input').first();
+    await weightInput.focus();
+    await weightInput.pressSequentially('12.5', { delay: 30 });
+
+    await expect(weightInput).toHaveValue('12.5');
+  });
+
   test('decimal weight persists after marking set done', async ({ page }) => {
     await enableDateMock(page, MOCK_NOW);
     await page.goto(BASE);
