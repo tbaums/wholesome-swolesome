@@ -25,7 +25,7 @@ A mobile-first PWA workout tracker built in Rust + Leptos (WASM). Instead of han
 
 3. **Run the workout.** On the Home tab, the *TODAY* card shows the scheduled workout. Tap *Start workout →* to enter the session view. Open each exercise's accordion, enter weight + reps for each set, tap ✓ to log it. The session auto-saves; you can close the browser mid-workout and resume.
 
-4. **Finish.** Tap *Finish Workout*. The session becomes a permanent history entry. The History tab updates the heatmap — the muscles you just worked turn deep green.
+4. **Finish.** Tap *Finish Workout*. The session becomes a permanent history entry. The History tab updates the heatmap — the muscles you just worked turn deep green. Back on Home, the TODAY card flips to a DONE state (✓ + workout name + "Generate tomorrow's now…"), so you can't accidentally re-enter the same session.
 
 5. **Repeat.** The coach reads the new history on its next run and adjusts: recently-hit muscles get prescribed less, neglected ones get prioritized, progressive overload is applied within rep ranges.
 
@@ -75,7 +75,7 @@ npx playwright test --config=playwright.local-chromium.config.ts
 npx playwright test --config=playwright.walkthrough.config.ts
 ```
 
-Screenshots from walkthrough runs land in `tests/playwright/screenshots/<spec-name>/` (gitignored).
+Walkthrough runs write to `tests/playwright/screenshots/<spec-name>/` (gitignored). A curated subset lives in [`docs/walkthrough/`](docs/walkthrough/) and is what [docs/walkthrough.md](docs/walkthrough.md) embeds — refresh those when you change the walkthrough flow.
 
 ## Architecture pointer
 

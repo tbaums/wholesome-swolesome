@@ -9,7 +9,7 @@ review cycle. This page is the 5-minute pitch.
 
 ---
 
-## A tour in 8 screenshots
+## A tour in 9 screenshots
 
 ### 1. Empty home
 
@@ -84,6 +84,16 @@ When you finish, you land on *History*. The body silhouette is colored by
 through paler greens to grey for "never." Below, the per-exercise session list.
 Next time the coach plans for you, this heatmap is the recovery state it reasons
 against — recently-hit muscles get prescribed less, neglected ones get prioritized.
+
+### 9. Home knows you're done
+
+<img src="walkthrough/09-home-done.png" width="320" alt="Workout tab after finishing — DONE badge replaces TODAY; CTA below points to generating tomorrow's workout">
+
+Go back to *Workout* and the TODAY card has flipped to a **DONE** state — ✓ +
+the workout name, "Today's workout is logged. Generate tomorrow's now, or wait
+for the nightly coach run." No Start button. You can't accidentally re-enter
+the same session, and the natural next action is the *Generate workout with
+Claude* button right below it. (Tap it; you're back at step 4 for tomorrow.)
 
 ---
 

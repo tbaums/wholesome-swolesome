@@ -266,5 +266,12 @@ test.describe('Transfemme walkthrough', () => {
     // Scroll to bottom for the session list
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await shot(page, 'history_session_list');
+
+    // ── 18. Back to Workout — TODAY card should now be the DONE state ────────
+    await page.locator('.nav-btn').filter({ hasText: 'Workout' }).click();
+    await page.waitForSelector('.today-badge');
+    // Sanity: the badge should read DONE now that today's workout was logged.
+    await expect(page.locator('.today-card .today-badge')).toHaveText('DONE');
+    await shot(page, 'home_after_finish_done');
   });
 });
