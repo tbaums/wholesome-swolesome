@@ -224,7 +224,7 @@ Design ONE workout for the target date. Apply:
 
 ## Response format
 
-Reply with **ONLY** this JSON, nothing else (no markdown fence, no commentary):
+Wrap your reply in a single fenced ```json code block — nothing else, no commentary before or after. The fence is important: it makes the response render as a code card in the Claude UI with a one-tap copy button, so the user can copy the whole JSON straight into the app's paste box. The app's importer strips the fence when parsing.
 
 ```json
 {
