@@ -116,6 +116,58 @@ test.describe('New exercise picker (library + custom fallback)', () => {
     await expect(page.locator('.ex-card').filter({ hasText: 'Cable Fly' })).toBeVisible();
   });
 
+  // 11 — regression guard: button must sit ABOVE the exercise cards so users
+  // don't have to scroll past a long list to add a new one.
+  test('"+ New Exercise" button sits above the exercise cards (DOM and visual order)', async ({ page }) => {
+    // Seed enough history to push the bottom of the list well off-screen.
+    await page.evaluate(() => {
+      const today = new Date().toISOString().slice(0, 10);
+      const mk = (name: string, i: number) => ({
+        id: `seed-${i}`,
+        date: today,
+        created_at: `${today}T10:0${i}:00.000Z`,
+        exercise_name: name,
+        exercise_id: `seed-${i}`,
+        session_id: null,
+        day_id: null,
+        day_name: null,
+        target_sets: 3,
+        reps_min: 8,
+        reps_max: 12,
+        sets: [
+          { set_number: 1, reps: 10, weight: 100, completed: true, completed_date: today },
+        ],
+        finalized: true,
+      });
+      const names = ['Bench Press', 'Squat', 'Deadlift', 'Row', 'OHP', 'Pull-up', 'Curl', 'Dip'];
+      localStorage.setItem('ws_ex_history', JSON.stringify(names.map(mk)));
+    });
+    await page.reload();
+    await page.waitForSelector('.bottom-nav');
+    await goToExercises(page);
+
+    // At least one exercise card should be on screen now.
+    await expect(page.locator('.ex-card').first()).toBeVisible();
+
+    // 1) DOM order — the button comes before the first .ex-card.
+    const buttonComesFirst = await page.evaluate(() => {
+      const btn = document.querySelector('.new-exercise-btn');
+      const card = document.querySelector('.ex-card');
+      if (!btn || !card) return null;
+      // DOCUMENT_POSITION_FOLLOWING (4) is set when `card` follows `btn`.
+      const pos = btn.compareDocumentPosition(card);
+      return (pos & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    });
+    expect(buttonComesFirst).toBe(true);
+
+    // 2) Visual order — button's top edge is above the first card's top edge.
+    const btnBox = await page.locator('.new-exercise-btn').boundingBox();
+    const cardBox = await page.locator('.ex-card').first().boundingBox();
+    expect(btnBox).not.toBeNull();
+    expect(cardBox).not.toBeNull();
+    expect(btnBox!.y).toBeLessThan(cardBox!.y);
+  });
+
   // 10
   test('added exercise persists after page reload', async ({ page }) => {
     await openPicker(page);
