@@ -100,7 +100,8 @@ fn ScheduledCard(workout: ScheduledWorkout, #[prop()] label: &'static str) -> im
         }
 
         let history = state.history.get_untracked();
-        let session = new_session_from_scheduled(&w_clone, &history);
+        let library = state.library.get_untracked();
+        let session = new_session_from_scheduled(&w_clone, &history, &library);
 
         if let Some(s) = existing {
             state.session_drafts.update(|drafts| {

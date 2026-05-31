@@ -89,7 +89,8 @@ async function seedAndStart(
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 test.describe('Session pre-fill from prior history', () => {
-  test('each set inherits weight + reps from the same set_number of the prior workout', async ({ page }) => {
+  test('each set inherits weight from history; reps come from the prescription', async ({ page }) => {
+    // Last session: reps 10/8/6 — all UNDER reps_max=12, so no step-up.
     const history = [
       historyEntry({
         exerciseName: 'Bench Press',
@@ -111,16 +112,19 @@ test.describe('Session pre-fill from prior history', () => {
     await expect(rows).toHaveCount(3);
 
     const inputs = (i: number) => rows.nth(i).locator('.set-num-input');
+    // Weights: per-set match from history.
     await expect(inputs(0).nth(0)).toHaveValue('135');
-    await expect(inputs(0).nth(1)).toHaveValue('10');
     await expect(inputs(1).nth(0)).toHaveValue('145');
-    await expect(inputs(1).nth(1)).toHaveValue('8');
     await expect(inputs(2).nth(0)).toHaveValue('155');
-    await expect(inputs(2).nth(1)).toHaveValue('6');
+    // Reps: all from prescription reps_min=8 (not the 10/8/6 the user did last time).
+    await expect(inputs(0).nth(1)).toHaveValue('8');
+    await expect(inputs(1).nth(1)).toHaveValue('8');
+    await expect(inputs(2).nth(1)).toHaveValue('8');
   });
 
-  test('extra sets beyond prior history fall back to the last prior set', async ({ page }) => {
+  test('extra sets beyond prior history fall back to the last prior weight', async ({ page }) => {
     // Prior workout had 2 sets; today's schedule asks for 4.
+    // Reps were 5/5 — well under reps_max=12, no step-up.
     const history = [
       historyEntry({
         exerciseName: 'Squat',
@@ -139,13 +143,15 @@ test.describe('Session pre-fill from prior history', () => {
     await expect(rows).toHaveCount(4);
 
     const inputs = (i: number) => rows.nth(i).locator('.set-num-input');
+    // Weights pre-fill per-set, then inherit the last prior weight for extras.
     await expect(inputs(0).nth(0)).toHaveValue('185');
     await expect(inputs(1).nth(0)).toHaveValue('205');
-    // Sets 3 and 4: no matching set_number → inherit from last prior (205 × 5).
     await expect(inputs(2).nth(0)).toHaveValue('205');
-    await expect(inputs(2).nth(1)).toHaveValue('5');
     await expect(inputs(3).nth(0)).toHaveValue('205');
-    await expect(inputs(3).nth(1)).toHaveValue('5');
+    // Reps now come from prescription, not history's 5s.
+    for (let i = 0; i < 4; i++) {
+      await expect(inputs(i).nth(1)).toHaveValue('8');
+    }
   });
 
   test('with no matching history, weight defaults to 0 and reps to reps_min', async ({ page }) => {
@@ -160,6 +166,64 @@ test.describe('Session pre-fill from prior history', () => {
       // weight 0.0 renders as empty (placeholder "wt" is shown instead of a literal 0)
       await expect(inputs(i).nth(0)).toHaveValue('');
       await expect(inputs(i).nth(1)).toHaveValue('8'); // reps_min from fixture
+    }
+  });
+
+  test('step-up hint shows + weight bumps by 5 when last session hit reps_max', async ({ page }) => {
+    // Last session: 3 sets at 100 lb × 12 reps. reps_max=12 → step-up trigger.
+    const history = [
+      historyEntry({
+        exerciseName: 'Bench Press',
+        exerciseId: 'Barbell_Bench_Press_-_Medium_Grip',
+        date: '2026-06-03',
+        sets: [
+          { reps: 12, weight: 100, completed: true },
+          { reps: 12, weight: 100, completed: true },
+          { reps: 12, weight: 100, completed: true },
+        ],
+      }),
+    ];
+    const scheduled = [
+      scheduledWorkout(TODAY, 'Bench Press', 'Barbell_Bench_Press_-_Medium_Grip', 3),
+    ];
+    await seedAndStart(page, history, scheduled);
+
+    // Hint renders above the sets.
+    await expect(page.locator('.step-up-hint').first()).toContainText('Hit top of range');
+    await expect(page.locator('.step-up-hint').first()).toContainText('105 lb');
+
+    // Every set's weight pre-fills at 100 + 5 = 105.
+    const rows = page.locator('.set-row');
+    const inputs = (i: number) => rows.nth(i).locator('.set-num-input');
+    for (let i = 0; i < 3; i++) {
+      await expect(inputs(i).nth(0)).toHaveValue('105');
+    }
+  });
+
+  test('no step-up hint when one set fell short of reps_max', async ({ page }) => {
+    // Two sets at top of range, one short → no trigger.
+    const history = [
+      historyEntry({
+        exerciseName: 'Bench Press',
+        exerciseId: 'Barbell_Bench_Press_-_Medium_Grip',
+        date: '2026-06-03',
+        sets: [
+          { reps: 12, weight: 100, completed: true },
+          { reps: 12, weight: 100, completed: true },
+          { reps: 10, weight: 100, completed: true }, // 10 < reps_max=12
+        ],
+      }),
+    ];
+    const scheduled = [
+      scheduledWorkout(TODAY, 'Bench Press', 'Barbell_Bench_Press_-_Medium_Grip', 3),
+    ];
+    await seedAndStart(page, history, scheduled);
+
+    await expect(page.locator('.step-up-hint')).toHaveCount(0);
+    const rows = page.locator('.set-row');
+    const inputs = (i: number) => rows.nth(i).locator('.set-num-input');
+    for (let i = 0; i < 3; i++) {
+      await expect(inputs(i).nth(0)).toHaveValue('100'); // no bump
     }
   });
 });

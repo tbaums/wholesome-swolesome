@@ -350,26 +350,47 @@ fn Toast() -> impl IntoView {
 pub fn new_session_from_scheduled(
     workout: &ScheduledWorkout,
     history: &[ExerciseEntry],
+    library: &[crate::models::LibraryExercise],
 ) -> WorkoutSession {
     let exercise_logs: Vec<ExerciseLog> = workout
         .exercises
         .iter()
         .map(|ex| {
             let is_duration = ex.target_duration_seconds.is_some();
+            let is_cardio = crate::library::is_cardio_exercise(
+                ex.library_id.as_deref().unwrap_or(""),
+                &ex.name,
+                library,
+            );
             let prev_sets = if is_duration {
                 Vec::new()
             } else {
                 last_completed_sets(history, ex)
             };
+            // Step-up: if last session hit the top of the rep range on every
+            // completed set, bump suggested weight by one barbell increment.
+            // Skip for cardio — `weight` there is RPE 1-10, not load.
+            let bump = if !is_cardio && should_step_up(&prev_sets, ex.reps_max) {
+                5.0
+            } else {
+                0.0
+            };
 
             let sets = (1..=ex.target_sets)
                 .map(|n| {
-                    let (weight, reps) = prev_sets
+                    // reps come from the prescription (target lower bound).
+                    // Coach-prescribed reps are the point; the user can adjust
+                    // mid-session, but the starting value is what was planned.
+                    let reps = ex.reps_min;
+                    // weight still pre-fills from history (coach doesn't
+                    // prescribe weight — it depends on progressive overload).
+                    let prev_weight = prev_sets
                         .iter()
                         .find(|s| s.set_number == n)
                         .or_else(|| prev_sets.last())
-                        .map(|s| (s.weight, s.reps))
-                        .unwrap_or((0.0, ex.reps_min));
+                        .map(|s| s.weight)
+                        .unwrap_or(0.0);
+                    let weight = if prev_weight > 0.0 { prev_weight + bump } else { 0.0 };
                     SetLog {
                         set_number: n,
                         reps,
@@ -418,6 +439,13 @@ fn last_completed_sets(
         Some(e) => e.sets.iter().filter(|s| s.completed).cloned().collect(),
         None => Vec::new(),
     }
+}
+
+/// Progressive-overload trigger: every completed set in the last session
+/// hit or exceeded the top of the prescribed rep range, and there was at
+/// least one such set. Empty input or any miss → no step-up.
+pub fn should_step_up(prev_sets: &[SetLog], reps_max: u32) -> bool {
+    !prev_sets.is_empty() && prev_sets.iter().all(|s| s.reps >= reps_max)
 }
 
 pub fn current_date() -> String {
@@ -505,7 +533,8 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn prefill_uses_matching_set_number_per_set() {
+    fn prefill_weight_per_set_reps_from_prescription() {
+        // Last session: progressive ramp under reps_max (12), so no step-up.
         let history = vec![entry(
             "Barbell_Bench_Press_-_Medium_Grip",
             "Bench Press",
@@ -522,19 +551,22 @@ mod tests {
             3,
         )]);
 
-        let session = new_session_from_scheduled(&workout, &history);
+        let session = new_session_from_scheduled(&workout, &history, &[]);
         let sets = &session.exercise_logs[0].sets;
 
+        // Weights still pre-fill from history (per-set match).
         assert_eq!(sets[0].weight, 135.0);
-        assert_eq!(sets[0].reps, 10);
         assert_eq!(sets[1].weight, 145.0);
-        assert_eq!(sets[1].reps, 8);
         assert_eq!(sets[2].weight, 155.0);
-        assert_eq!(sets[2].reps, 6);
+        // Reps now come from the prescription (reps_min=8 for every set),
+        // not from what the user did last time.
+        assert_eq!(sets[0].reps, 8);
+        assert_eq!(sets[1].reps, 8);
+        assert_eq!(sets[2].reps, 8);
     }
 
     #[wasm_bindgen_test]
-    fn prefill_falls_back_to_last_prior_set_when_target_has_more_sets() {
+    fn prefill_weight_falls_back_to_last_prior_set_when_target_has_more_sets() {
         let history = vec![entry(
             "Barbell_Squat",
             "Squat",
@@ -544,23 +576,25 @@ mod tests {
         // Asking for 4 sets but only 2 were logged previously.
         let workout = sched_workout(vec![sched_ex(Some("Barbell_Squat"), "Squat", 4)]);
 
-        let session = new_session_from_scheduled(&workout, &history);
+        let session = new_session_from_scheduled(&workout, &history, &[]);
         let sets = &session.exercise_logs[0].sets;
 
+        // Weights: per-set match where available, else last prior set.
         assert_eq!(sets[0].weight, 185.0);
         assert_eq!(sets[1].weight, 205.0);
-        // Sets 3 and 4 inherit from the last prior set (205 × 5).
         assert_eq!(sets[2].weight, 205.0);
-        assert_eq!(sets[2].reps, 5);
         assert_eq!(sets[3].weight, 205.0);
-        assert_eq!(sets[3].reps, 5);
+        // Reps always from prescription.
+        for s in sets {
+            assert_eq!(s.reps, 8);
+        }
     }
 
     #[wasm_bindgen_test]
     fn prefill_defaults_to_zero_weight_and_reps_min_when_no_history() {
         let workout = sched_workout(vec![sched_ex(Some("Deadlift"), "Deadlift", 3)]);
 
-        let session = new_session_from_scheduled(&workout, &[]);
+        let session = new_session_from_scheduled(&workout, &[], &[]);
         let sets = &session.exercise_logs[0].sets;
 
         for s in sets {
@@ -571,7 +605,7 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn prefill_ignores_uncompleted_prior_sets() {
+    fn prefill_weight_ignores_uncompleted_prior_sets() {
         let history = vec![entry(
             "Row",
             "Row",
@@ -584,20 +618,18 @@ mod tests {
         )];
         let workout = sched_workout(vec![sched_ex(None, "Row", 3)]);
 
-        let session = new_session_from_scheduled(&workout, &history);
+        let session = new_session_from_scheduled(&workout, &history, &[]);
         let sets = &session.exercise_logs[0].sets;
 
         assert_eq!(sets[0].weight, 95.0);
         assert_eq!(sets[1].weight, 105.0);
-        // Set 3 should fall back to the last *completed* prior set (set 2: 105 × 8),
-        // not the missed 115 × 6.
+        // Set 3 should fall back to the last *completed* prior set (set 2: 105),
+        // not the missed 115.
         assert_eq!(sets[2].weight, 105.0);
-        assert_eq!(sets[2].reps, 8);
     }
 
     #[wasm_bindgen_test]
     fn prefill_matches_by_library_id_when_present() {
-        // History has an entry whose name doesn't match but whose library_id does.
         let history = vec![entry(
             "Barbell_Bench_Press_-_Medium_Grip",
             "Whatever The User Renamed It",
@@ -610,7 +642,58 @@ mod tests {
             1,
         )]);
 
-        let session = new_session_from_scheduled(&workout, &history);
+        let session = new_session_from_scheduled(&workout, &history, &[]);
         assert_eq!(session.exercise_logs[0].sets[0].weight, 200.0);
+    }
+
+    // ── Step-up (progressive overload nudge) ──────────────────────────────────
+
+    #[wasm_bindgen_test]
+    fn step_up_bumps_weight_when_every_set_hit_reps_max() {
+        // Last session: 3 sets all at reps_max (12). Trigger.
+        let history = vec![entry(
+            "Press",
+            "Press",
+            "2026-05-20",
+            vec![
+                set(1, 100.0, 12, true),
+                set(2, 100.0, 12, true),
+                set(3, 100.0, 12, true),
+            ],
+        )];
+        let workout = sched_workout(vec![sched_ex(None, "Press", 3)]);
+        let session = new_session_from_scheduled(&workout, &history, &[]);
+        for s in &session.exercise_logs[0].sets {
+            assert_eq!(s.weight, 105.0, "every set should bump by 5 lb");
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn step_up_skips_when_any_set_short_of_reps_max() {
+        let history = vec![entry(
+            "Press",
+            "Press",
+            "2026-05-20",
+            vec![
+                set(1, 100.0, 12, true),
+                set(2, 100.0, 12, true),
+                set(3, 100.0, 10, true), // shy of reps_max=12 → no step-up
+            ],
+        )];
+        let workout = sched_workout(vec![sched_ex(None, "Press", 3)]);
+        let session = new_session_from_scheduled(&workout, &history, &[]);
+        for s in &session.exercise_logs[0].sets {
+            assert_eq!(s.weight, 100.0, "no bump when last session missed top");
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn step_up_skips_when_no_prior_weight() {
+        // First-ever session for this exercise: no bump even if "reps_max" condition would match.
+        let workout = sched_workout(vec![sched_ex(None, "Press", 3)]);
+        let session = new_session_from_scheduled(&workout, &[], &[]);
+        for s in &session.exercise_logs[0].sets {
+            assert_eq!(s.weight, 0.0);
+        }
     }
 }
