@@ -642,8 +642,17 @@ fn FreeformSetRow(
         )
     };
 
+    let is_bodyweight = {
+        let exercise_id = exercise_id.clone();
+        let exercise_name = exercise_name.clone();
+        move || crate::library::is_bodyweight_exercise(
+            &exercise_id,
+            &exercise_name,
+            &state.library.get(),
+        )
+    };
+
     let is_done2 = is_done.clone();
-    let is_cardio_sep = is_cardio.clone();
 
     view! {
         <div class="set-row" class:set-done=is_done>
@@ -651,6 +660,7 @@ fn FreeformSetRow(
             <div class="set-inputs">
                 {
                     let is_cardio = is_cardio.clone();
+                    let is_bodyweight = is_bodyweight.clone();
                     let weight_str = weight_str.clone();
                     let reps_str = reps_str.clone();
                     let on_weight_change = on_weight_change.clone();
@@ -658,6 +668,8 @@ fn FreeformSetRow(
                     move || if is_cardio() {
                         let reps_str = reps_str.clone();
                         let on_reps_change = on_reps_change.clone();
+                        let weight_str = weight_str.clone();
+                        let on_weight_change = on_weight_change.clone();
                         view! {
                             <input
                                 type="number"
@@ -669,31 +681,7 @@ fn FreeformSetRow(
                                 prop:value=reps_str
                                 on:change=on_reps_change
                             />
-                        }.into_any()
-                    } else {
-                        let weight_str = weight_str.clone();
-                        let on_weight_change = on_weight_change.clone();
-                        view! {
-                            <input
-                                type="number"
-                                inputmode="decimal"
-                                step="any"
-                                min="0"
-                                class="set-num-input"
-                                placeholder="wt"
-                                prop:value=weight_str
-                                on:change=on_weight_change
-                            />
-                        }.into_any()
-                    }
-                }
-                <span class="set-x">{move || if is_cardio_sep() { "@" } else { "×" }}</span>
-                {
-                    let is_cardio = is_cardio.clone();
-                    move || if is_cardio() {
-                        let weight_str = weight_str.clone();
-                        let on_weight_change = on_weight_change.clone();
-                        view! {
+                            <span class="set-x">"@"</span>
                             <input
                                 type="number"
                                 inputmode="numeric"
@@ -706,10 +694,39 @@ fn FreeformSetRow(
                                 on:change=on_weight_change
                             />
                         }.into_any()
-                    } else {
+                    } else if is_bodyweight() {
+                        // Bodyweight: only reps. weight stays at 0 in storage, schema unchanged.
                         let reps_str = reps_str.clone();
                         let on_reps_change = on_reps_change.clone();
                         view! {
+                            <input
+                                type="number"
+                                inputmode="numeric"
+                                step="1"
+                                min="0"
+                                class="set-num-input"
+                                placeholder="reps"
+                                prop:value=reps_str
+                                on:change=on_reps_change
+                            />
+                        }.into_any()
+                    } else {
+                        let weight_str = weight_str.clone();
+                        let on_weight_change = on_weight_change.clone();
+                        let reps_str = reps_str.clone();
+                        let on_reps_change = on_reps_change.clone();
+                        view! {
+                            <input
+                                type="number"
+                                inputmode="decimal"
+                                step="any"
+                                min="0"
+                                class="set-num-input"
+                                placeholder="wt"
+                                prop:value=weight_str
+                                on:change=on_weight_change
+                            />
+                            <span class="set-x">"×"</span>
                             <input
                                 type="number"
                                 inputmode="numeric"
