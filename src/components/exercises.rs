@@ -166,17 +166,10 @@ pub fn ExercisesView() -> impl IntoView {
             <div class="page-header">
                 <h1 class="page-title">"Exercises"</h1>
             </div>
-            <For
-                each=move || exercise_names.get()
-                key=|name| name.clone()
-                children=move |exercise_name| {
-                    view! { <ExerciseFreeformCard exercise_name=exercise_name open_ex=open_ex/> }
-                }
-            />
 
             {move || if show_picker.get() {
                 view! {
-                    <div class="new-exercise-form card" style="margin-top:12px">
+                    <div class="new-exercise-form card" style="margin-bottom:12px">
                         <input
                             type="text"
                             placeholder="Filter exercises…"
@@ -255,11 +248,19 @@ pub fn ExercisesView() -> impl IntoView {
                 view! {
                     <button
                         class="btn btn-secondary btn-full new-exercise-btn"
-                        style="margin-top:12px"
+                        style="margin-bottom:12px"
                         on:click=move |_| show_picker.set(true)
                     >"+ New Exercise"</button>
                 }.into_any()
             }}
+
+            <For
+                each=move || exercise_names.get()
+                key=|name| name.clone()
+                children=move |exercise_name| {
+                    view! { <ExerciseFreeformCard exercise_name=exercise_name open_ex=open_ex/> }
+                }
+            />
         </div>
     }
 }
