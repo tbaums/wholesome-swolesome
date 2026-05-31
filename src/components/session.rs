@@ -451,6 +451,21 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         }
     };
 
+    let is_bodyweight = {
+        let ex_id = ex_id.clone();
+        move || {
+            let Some(session) = state.active_session.get() else { return false; };
+            let Some(log) = session.exercise_logs.iter().find(|e| e.exercise_id == ex_id) else {
+                return false;
+            };
+            crate::library::is_bodyweight_exercise(
+                &log.exercise_id,
+                &log.exercise_name,
+                &state.library.get(),
+            )
+        }
+    };
+
     let duration_str = move || {
         let d = duration();
         if d == 0 { String::new() } else { d.to_string() }
@@ -464,7 +479,6 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
     };
 
     let is_done2 = is_done.clone();
-    let is_cardio_sep = is_cardio.clone();
 
     if is_dur_static {
         view! {
@@ -494,13 +508,17 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                 <div class="set-inputs">
                     {
                         let is_cardio = is_cardio.clone();
+                        let is_bodyweight = is_bodyweight.clone();
                         let weight_str = weight_str.clone();
                         let reps_str = reps_str.clone();
                         let on_weight_change = on_weight_change.clone();
                         let on_reps_change = on_reps_change.clone();
                         move || if is_cardio() {
+                            // cardio precedence: minutes @ RPE
                             let reps_str = reps_str.clone();
                             let on_reps_change = on_reps_change.clone();
+                            let weight_str = weight_str.clone();
+                            let on_weight_change = on_weight_change.clone();
                             view! {
                                 <input
                                     type="number"
@@ -512,36 +530,7 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                                     prop:value=reps_str
                                     on:input=on_reps_change
                                 />
-                            }.into_any()
-                        } else {
-                            let weight_str = weight_str.clone();
-                            let on_weight_change = on_weight_change.clone();
-                            // type="text" + inputmode="decimal": the browser
-                            // normalizes type=number's .value, stripping
-                            // partial input like "12." before the user can
-                            // finish typing "12.5". Text mode returns the
-                            // raw string; inputmode keeps the mobile decimal
-                            // keyboard.
-                            view! {
-                                <input
-                                    type="text"
-                                    inputmode="decimal"
-                                    pattern="[0-9]*\\.?[0-9]*"
-                                    class="set-num-input"
-                                    placeholder="wt"
-                                    prop:value=weight_str
-                                    on:input=on_weight_change
-                                />
-                            }.into_any()
-                        }
-                    }
-                    <span class="set-x">{move || if is_cardio_sep() { "@" } else { "×" }}</span>
-                    {
-                        let is_cardio = is_cardio.clone();
-                        move || if is_cardio() {
-                            let weight_str = weight_str.clone();
-                            let on_weight_change = on_weight_change.clone();
-                            view! {
+                                <span class="set-x">"@"</span>
                                 <input
                                     type="number"
                                     inputmode="numeric"
@@ -554,10 +543,42 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                                     on:input=on_weight_change
                                 />
                             }.into_any()
-                        } else {
+                        } else if is_bodyweight() {
+                            // Bodyweight: only reps. No weight input, no separator.
+                            // SetLog.weight stays at its default (0.0) and round-trips
+                            // through serde unchanged, so existing data is untouched.
                             let reps_str = reps_str.clone();
                             let on_reps_change = on_reps_change.clone();
                             view! {
+                                <input
+                                    type="number"
+                                    inputmode="numeric"
+                                    step="1"
+                                    min="0"
+                                    class="set-num-input"
+                                    placeholder="reps"
+                                    prop:value=reps_str
+                                    on:input=on_reps_change
+                                />
+                            }.into_any()
+                        } else {
+                            // Standard: weight × reps. type="text" + inputmode="decimal"
+                            // preserves trailing "." during typing on mobile.
+                            let weight_str = weight_str.clone();
+                            let on_weight_change = on_weight_change.clone();
+                            let reps_str = reps_str.clone();
+                            let on_reps_change = on_reps_change.clone();
+                            view! {
+                                <input
+                                    type="text"
+                                    inputmode="decimal"
+                                    pattern="[0-9]*\\.?[0-9]*"
+                                    class="set-num-input"
+                                    placeholder="wt"
+                                    prop:value=weight_str
+                                    on:input=on_weight_change
+                                />
+                                <span class="set-x">"×"</span>
                                 <input
                                     type="number"
                                     inputmode="numeric"

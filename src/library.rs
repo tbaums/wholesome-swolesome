@@ -108,6 +108,24 @@ pub fn is_cardio_exercise(
     category_of(exercise_id, exercise_name, library) == Some("cardio")
 }
 
+/// True if the named exercise is in the library with `equipment == "body only"` —
+/// i.e., a bodyweight movement (push-ups, pull-ups, dips, plank). Used to hide the
+/// weight input from set rows so the user only logs reps. Exercises not found in the
+/// library default to false, so freeform / custom entries keep the standard weight × reps
+/// inputs unless the user explicitly imports them from a `body only` library entry.
+pub fn is_bodyweight_exercise(
+    exercise_id: &str,
+    exercise_name: &str,
+    library: &[LibraryExercise],
+) -> bool {
+    let name_lc = exercise_name.to_lowercase();
+    library
+        .iter()
+        .find(|e| e.id == exercise_id || e.name.to_lowercase() == name_lc)
+        .and_then(|e| e.equipment.as_deref())
+        .is_some_and(|eq| eq == "body only")
+}
+
 // ── Muscle aggregation from history ──────────────────────────────────────────
 
 /// For each free-exercise-db muscle key, the most recent date (YYYY-MM-DD)

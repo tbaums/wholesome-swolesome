@@ -340,6 +340,144 @@ mod tests {
         assert!(!is_cardio_exercise("Unknown", "Unknown Exercise", &lib));
     }
 
+    // ── Bodyweight detection ─────────────────────────────────────────────────
+
+    fn lib_entry_with_equipment(id: &str, name: &str, equipment: Option<&str>) -> crate::models::LibraryExercise {
+        crate::models::LibraryExercise {
+            id: id.into(),
+            name: name.into(),
+            force: None,
+            level: "intermediate".into(),
+            mechanic: None,
+            equipment: equipment.map(String::from),
+            primary_muscles: vec!["chest".into()],
+            secondary_muscles: vec![],
+            instructions: vec![],
+            category: "strength".into(),
+            images: vec![],
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn is_bodyweight_true_for_body_only_equipment() {
+        use crate::library::is_bodyweight_exercise;
+        let lib = vec![lib_entry_with_equipment("Pull-Up", "Pull-up", Some("body only"))];
+        assert!(is_bodyweight_exercise("Pull-Up", "Pull-up", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_bodyweight_true_via_name_fallback() {
+        // Library lookup falls back to lowercased-name match if id misses.
+        use crate::library::is_bodyweight_exercise;
+        let lib = vec![lib_entry_with_equipment("Pull-Up", "Pull-up", Some("body only"))];
+        assert!(is_bodyweight_exercise("wrong-id", "Pull-up", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_bodyweight_false_for_barbell_equipment() {
+        use crate::library::is_bodyweight_exercise;
+        let lib = vec![lib_entry_with_equipment("Bench", "Bench Press", Some("barbell"))];
+        assert!(!is_bodyweight_exercise("Bench", "Bench Press", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_bodyweight_false_when_equipment_is_none() {
+        // Library entries without equipment (most stretching) should not flip the bit —
+        // those use other render paths (duration timer, cardio, etc.).
+        use crate::library::is_bodyweight_exercise;
+        let lib = vec![lib_entry_with_equipment("Cat_Stretch", "Cat Stretch", None)];
+        assert!(!is_bodyweight_exercise("Cat_Stretch", "Cat Stretch", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_bodyweight_false_when_not_in_library() {
+        // Freeform / custom exercises (no library entry) keep the standard weight × reps UI.
+        use crate::library::is_bodyweight_exercise;
+        let lib = vec![lib_entry_with_equipment("Bench", "Bench Press", Some("barbell"))];
+        assert!(!is_bodyweight_exercise("My Custom Lift", "My Custom Lift", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_bodyweight_false_for_exercise_ball() {
+        // "exercise ball" includes weighted variants — keep weight input visible.
+        use crate::library::is_bodyweight_exercise;
+        let lib = vec![lib_entry_with_equipment("WBH", "Weighted Ball Hyperextension", Some("exercise ball"))];
+        assert!(!is_bodyweight_exercise("WBH", "Weighted Ball Hyperextension", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn bodyweight_entry_with_non_zero_weight_round_trips_unchanged() {
+        // Historical edge case: a user logged a weighted pull-up under the
+        // plain "Pullups" name BEFORE we hid the weight input. The UI no
+        // longer offers a weight field for body-only exercises, but the
+        // existing data must serialize → deserialize → serialize back to
+        // bytes-identical JSON. Library detection is a render-time concern;
+        // it MUST NOT influence storage.
+        let entry = ExerciseEntry {
+            id: "e-legacy".into(),
+            date: "2026-04-01".into(),
+            created_at: "2026-04-01T10:00:00.000Z".into(),
+            exercise_name: "Pullups".into(),
+            exercise_id: "Pullups".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 3,
+            reps_min: 5,
+            reps_max: 8,
+            sets: vec![crate::models::SetLog {
+                set_number: 1,
+                reps: 6,
+                weight: 25.0, // legacy weighted pull-up entry
+                completed: true,
+                completed_date: Some("2026-04-01".into()),
+                duration_seconds: None,
+            }],
+            finalized: true,
+            target_duration_seconds: None,
+        };
+        let first = serde_json::to_string(&entry).unwrap();
+        let parsed: ExerciseEntry = serde_json::from_str(&first).unwrap();
+        let second = serde_json::to_string(&parsed).unwrap();
+        assert_eq!(first, second, "round-trip must be byte-identical");
+        assert_eq!(parsed.sets[0].weight, 25.0, "weight must not be zeroed");
+    }
+
+    #[wasm_bindgen_test]
+    fn bodyweight_entry_with_zero_weight_round_trips_unchanged() {
+        // The expected new-data case: bodyweight set logged with weight=0.0
+        // (the default the schema has always written for non-weighted sets).
+        let entry = ExerciseEntry {
+            id: "e-new".into(),
+            date: "2026-05-31".into(),
+            created_at: "2026-05-31T10:00:00.000Z".into(),
+            exercise_name: "Pullups".into(),
+            exercise_id: "Pullups".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 3,
+            reps_min: 5,
+            reps_max: 10,
+            sets: vec![crate::models::SetLog {
+                set_number: 1,
+                reps: 8,
+                weight: 0.0,
+                completed: true,
+                completed_date: Some("2026-05-31".into()),
+                duration_seconds: None,
+            }],
+            finalized: true,
+            target_duration_seconds: None,
+        };
+        let first = serde_json::to_string(&entry).unwrap();
+        let parsed: ExerciseEntry = serde_json::from_str(&first).unwrap();
+        let second = serde_json::to_string(&parsed).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(parsed.sets[0].weight, 0.0);
+        assert_eq!(parsed.sets[0].reps, 8);
+    }
+
     // ── Coach: library-id validation ─────────────────────────────────────────
 
     #[wasm_bindgen_test]
