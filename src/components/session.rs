@@ -252,6 +252,39 @@ fn ExerciseCard(
         }
     };
 
+    // Step-up nudge: if last session hit reps_max on every completed set,
+    // suggest a +5 lb bump. Skipped for cardio (weight = RPE 1-10) and for
+    // duration-based exercises.
+    let step_up_target_weight = {
+        let ex_id = ex_id.clone();
+        move || -> Option<f32> {
+            let log = state.active_session.get()
+                .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())?;
+            if log.target_duration_seconds.is_some() {
+                return None;
+            }
+            let lib = state.library.get();
+            if crate::library::is_cardio_exercise(&log.exercise_id, &log.exercise_name, &lib) {
+                return None;
+            }
+            let history = state.history.get();
+            let name_lc = log.exercise_name.to_lowercase();
+            let prev = history.iter().rev().find(|e| {
+                e.exercise_id == log.exercise_id || e.exercise_name.to_lowercase() == name_lc
+            })?;
+            let completed: Vec<_> = prev.sets.iter().filter(|s| s.completed).collect();
+            if completed.is_empty() || !completed.iter().all(|s| s.reps >= log.reps_max) {
+                return None;
+            }
+            let last_weight = completed.last().map(|s| s.weight).unwrap_or(0.0);
+            if last_weight > 0.0 {
+                Some(last_weight + 5.0)
+            } else {
+                None
+            }
+        }
+    };
+
     let is_complete2 = is_complete.clone();
     let is_expanded2 = is_expanded.clone();
 
@@ -277,6 +310,19 @@ fn ExerciseCard(
             // Animated accordion body (CSS grid trick — no JS height calc needed)
             <div class="exercise-body" class:open=is_expanded2>
                 <div>
+                    {move || step_up_target_weight().map(|target| {
+                        let label = if target.fract() == 0.0 {
+                            format!("{:.0}", target)
+                        } else {
+                            format!("{}", target)
+                        };
+                        view! {
+                            <div class="step-up-hint">
+                                "💪 Hit top of range last time — try "
+                                <strong>{label}" lb"</strong>
+                            </div>
+                        }
+                    })}
                     <div class="exercise-sets">
                         <For
                             each=set_indices
