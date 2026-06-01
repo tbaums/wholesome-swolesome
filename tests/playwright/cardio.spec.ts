@@ -134,3 +134,103 @@ test.describe('Cardio history detail', () => {
     await expect(cells.nth(2)).toHaveText('7');
   });
 });
+
+test.describe('Cardio actuals import card', () => {
+  function scheduledZoneWorkout(date: string) {
+    return {
+      id: 'w-zone',
+      date,
+      name: 'Zone 2 + Z4 intervals',
+      rationale: '',
+      source: 'Coach',
+      exercises: [
+        {
+          library_id: 'Running_Treadmill',
+          name: 'Running, Treadmill',
+          target_sets: 1,
+          reps_min: 29,
+          reps_max: 29,
+          rest_seconds: 0,
+          notes: null,
+          target_zones: [
+            { zone: 1, minutes: 13 },
+            { zone: 4, minutes: 16 },
+          ],
+        },
+      ],
+      created_at: '2026-06-09T20:00:00.000Z',
+    };
+  }
+
+  test('copy button puts the prompt onto the clipboard with the right library_id', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await enableDateMock(page, MOCK_NOW);
+    await page.goto(BASE);
+    await page.waitForSelector('.bottom-nav');
+    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(
+      (val) => localStorage.setItem('ws_scheduled_workouts', val),
+      JSON.stringify([scheduledZoneWorkout(TODAY)]),
+    );
+    await page.goto(BASE);
+    await page.waitForSelector('.bottom-nav');
+    await page.locator('button').filter({ hasText: 'Start workout' }).click();
+    await page.waitForSelector('.ex-card');
+
+    // The cardio-import card should be visible.
+    const card = page.locator('.cardio-import-card');
+    await expect(card).toBeVisible();
+
+    // Prompt block contains the actual library_id (not the <library_id> placeholder).
+    await expect(card.locator('.ci-prompt')).toContainText('Running_Treadmill');
+    await expect(card.locator('.ci-prompt')).not.toContainText('<library_id>');
+    await expect(card.locator('.ci-prompt')).toContainText('cardio_actuals');
+
+    // Tap copy → clipboard contains the prompt text.
+    await card.locator('.ci-copy-btn').click();
+    // Toast confirms.
+    await expect(page.locator('.toast')).toContainText('Prompt copied');
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboard).toContain('Running_Treadmill');
+    expect(clipboard).toContain('cardio_actuals');
+    expect(clipboard).toContain('Apple Health');
+  });
+
+  test('importing pasted JSON writes zone_minutes onto the matching set', async ({ page }) => {
+    await enableDateMock(page, MOCK_NOW);
+    await page.goto(BASE);
+    await page.waitForSelector('.bottom-nav');
+    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(
+      (val) => localStorage.setItem('ws_scheduled_workouts', val),
+      JSON.stringify([scheduledZoneWorkout(TODAY)]),
+    );
+    await page.goto(BASE);
+    await page.waitForSelector('.bottom-nav');
+    await page.locator('button').filter({ hasText: 'Start workout' }).click();
+    await page.waitForSelector('.ex-card');
+
+    const card = page.locator('.cardio-import-card');
+    await card.locator('textarea').fill(
+      '```json\n{"cardio_actuals":{"exercise_id":"Running_Treadmill","zones":[{"zone":1,"minutes":12},{"zone":4,"minutes":18}]}}\n```',
+    );
+    await card.locator('button').filter({ hasText: 'Import cardio actuals' }).click();
+
+    // Confirmation row appears.
+    await expect(card).toContainText('Wrote zone actuals');
+
+    // Verify the active session got the zone_minutes on the last set.
+    const stored = await page.evaluate(() => localStorage.getItem('ws_active_session'));
+    const session = JSON.parse(stored || '{}');
+    const log = session.exercise_logs.find((e: { exercise_id: string }) => e.exercise_id === 'Running_Treadmill');
+    expect(log).toBeTruthy();
+    const lastSet = log.sets[log.sets.length - 1];
+    expect(lastSet.zone_minutes).toEqual([
+      { zone: 1, minutes: 12 },
+      { zone: 4, minutes: 18 },
+    ]);
+  });
+});
