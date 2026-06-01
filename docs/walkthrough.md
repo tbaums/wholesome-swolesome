@@ -205,7 +205,7 @@ about again — sidesteps the whole pile.
   (date, day, exercise, set #, reps, weight, completed, duration). If you ever
   outgrow the app, you walk away with a CSV.
 - **Walkthrough-as-tests.** This page's screenshots come from
-  `tests/playwright/walkthrough_transfemme.spec.ts` — the same e2e test that
+  `tests/playwright/walkthrough_hypertrophy.spec.ts` — the same e2e test that
   proves the goal → coach → session → history flow works end-to-end. Updating
   the screenshots is just re-running the test.
 
