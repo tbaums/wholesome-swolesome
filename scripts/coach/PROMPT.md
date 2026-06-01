@@ -133,10 +133,18 @@ Apply these rules:
 - **Cardio** — if `goals.weekly_cardio_minutes_target` is set and the user is short of it
   for the rolling 7-day window (compute from `exercise_history` entries whose library
   `category` is `cardio` — `reps` stores minutes), include a cardio exercise sized to close
-  the gap. Use `target_sets: 1`, set `reps_min`/`reps_max` to the planned minutes, and
-  set the implicit `weight` field to an RPE 1-10 (the app shows this as "RPE" for cardio
-  exercises). Apply progressive overload to cardio too: if the prior cardio session was
-  completed cleanly, bump minutes ~5-10% or RPE one notch.
+  the gap. Two encodings:
+  - **Preferred: HR-zone breakdown.** Add `target_zones`: an array of `{zone, minutes}`
+    objects using Apple-Watch zones 1-5 (Z1 very light, Z2 easy aerobic, Z3 moderate,
+    Z4 threshold, Z5 max). E.g. base zone-2: `[{zone: 2, minutes: 30}]`. Intervals like
+    "5 min Z1 warm-up, 4×4 min Z4 with 3 min Z1 between, 5 min Z1 cool-down" sum to
+    `[{zone: 1, minutes: 13}, {zone: 4, minutes: 16}]`. Set `reps_min`/`reps_max` to
+    the total minutes (sum across zones) and `target_sets: 1`. Omit weight/RPE.
+  - **Fallback: total minutes + RPE.** If a clear zone breakdown isn't warranted (casual
+    walk, etc.), omit `target_zones`. Then `reps_min`/`reps_max` are minutes; the
+    implicit `weight` field is RPE 1-10 (the app shows it as "RPE"); `target_sets: 1`.
+  - Apply progressive overload either way: if the prior cardio session was completed
+    cleanly, bump minutes ~5-10% or one zone notch up.
 - **Session time budget**: Reserve ~5 min for the cooldown stretch block and ~5 min for
   balance work when included. If cardio is included, budget its minutes explicitly. Subtract
   all of these from `session_minutes` before budgeting strength sets.

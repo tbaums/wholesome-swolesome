@@ -398,6 +398,7 @@ pub fn new_session_from_scheduled(
                         completed: false,
                         completed_date: None,
                         duration_seconds: ex.target_duration_seconds,
+                        zone_minutes: None,
                     }
                 })
                 .collect();
@@ -410,6 +411,7 @@ pub fn new_session_from_scheduled(
                 reps_max: ex.reps_max,
                 sets,
                 target_duration_seconds: ex.target_duration_seconds,
+                target_zones: ex.target_zones.clone(),
             }
         })
         .collect();
@@ -494,6 +496,7 @@ mod tests {
             rest_seconds: 90,
             notes: None,
             target_duration_seconds: None,
+            target_zones: None,
         }
     }
 
@@ -505,7 +508,7 @@ mod tests {
             completed,
             completed_date: None,
             duration_seconds: None,
-        }
+            zone_minutes: None,        }
     }
 
     fn entry(

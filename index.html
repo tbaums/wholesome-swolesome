@@ -385,6 +385,79 @@
     }
     .step-up-hint strong { color: var(--pink); font-weight: 700; }
 
+    /* ── Zone-shaped cardio set rows ── */
+    .set-row-zones {
+      align-items: flex-start;
+      padding: 10px 0 8px;
+    }
+    .zone-grid {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-right: 8px;
+    }
+    .zone-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .zone-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--accent);
+      width: 28px;
+      flex-shrink: 0;
+    }
+    .zone-input {
+      width: 64px !important;
+      padding: 6px 4px !important;
+      font-size: 14px !important;
+      font-weight: 700;
+      text-align: center;
+    }
+    .zone-target {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ── Cardio actuals (Apple Health screenshot import) ── */
+    .cardio-import-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 12px;
+      margin-bottom: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cardio-import-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 5px;
+      background: var(--trans);
+    }
+    .cardio-import-card textarea {
+      width: 100%;
+      min-height: 100px;
+      margin-top: 8px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 12px;
+    }
+    .cardio-import-card .ci-title {
+      font-size: 13px;
+      font-weight: 700;
+      background: var(--trans);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 2px;
+    }
+    .cardio-import-card .ci-blurb {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
     /* ── Exercise complete button (single, always present) ── */
     .ex-complete-btn {
       font-size: 11px;

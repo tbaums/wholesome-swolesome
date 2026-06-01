@@ -181,6 +181,15 @@ pub enum WorkoutSource {
     Manual,
 }
 
+/// Apple-Health-style HR zone budget. Used both as a coach prescription
+/// (`target_zones`) and as a per-set actual (`zone_minutes`). Zone 1-5 maps
+/// to the standard Apple Watch HR zones; we don't try to redefine them.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ZoneTarget {
+    pub zone: u8,
+    pub minutes: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScheduledExercise {
     /// `LibraryExercise.id` from /data/exercises.json. None = freeform name only.
@@ -194,6 +203,10 @@ pub struct ScheduledExercise {
     pub notes: Option<String>,
     #[serde(default)]
     pub target_duration_seconds: Option<u32>,
+    /// Coach-prescribed HR zone breakdown for cardio. When `Some`, the
+    /// session UI shows one input per zone instead of min × RPE.
+    #[serde(default)]
+    pub target_zones: Option<Vec<ZoneTarget>>,
 }
 
 // ── Session (in-progress / completed workout) ────────────────────────────────
@@ -220,6 +233,10 @@ pub struct ExerciseLog {
     pub sets: Vec<SetLog>,
     #[serde(default)]
     pub target_duration_seconds: Option<u32>,
+    /// Mirrors the prescription's `target_zones` so the session UI can
+    /// render zone inputs without re-reading the original ScheduledExercise.
+    #[serde(default)]
+    pub target_zones: Option<Vec<ZoneTarget>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -233,6 +250,10 @@ pub struct SetLog {
     pub completed_date: Option<String>,
     #[serde(default)]
     pub duration_seconds: Option<u32>,
+    /// Actual minutes-per-zone the user logged for this set. Only ever
+    /// populated for zone-shaped cardio sets; None for everything else.
+    #[serde(default)]
+    pub zone_minutes: Option<Vec<ZoneTarget>>,
 }
 
 // ── Flat exercise-entry history (unchanged) ───────────────────────────────────
