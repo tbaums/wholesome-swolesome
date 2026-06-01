@@ -218,7 +218,10 @@ Design ONE workout for the target date. Apply:
 - **Equipment** — only prescribe exercises whose `equipment` is in the user's available list (empty list = full commercial gym, all equipment OK).
 - **Stretching** — see the user's mobility focus above. Default (Standard) is 3-5 stretches as a cooldown each session, prioritizing muscles with high "days since last stretched" in the table above. Use `target_sets: 2`, `reps_min: 1`, `reps_max: 1`, `target_duration_seconds: 30`, `rest_seconds: 10`.
 - **Balance** — see the user's balance focus above. Default (Standard) is 2-3 balance exercises after main lifts on 2-3 sessions per week. For timed holds: `target_sets: 2-3`, `reps_min: 1`, `reps_max: 1`, `target_duration_seconds: 20-45`. For rep-based balance drills: use normal reps, omit `target_duration_seconds`.
-- **Cardio** — if a weekly cardio minutes target is set above and the logged-in-last-7d number is short, include a cardio piece (category=cardio) sized to close the gap. For cardio exercises, `reps` is minutes and `weight` is RPE 1-10; set `target_sets: 1` and use realistic minutes/RPE for the exercise. Apply progressive overload to cardio too — bump minutes ~5-10% or RPE one notch if the prior session was completed cleanly.
+- **Cardio** — if a weekly cardio minutes target is set above and the logged-in-last-7d number is short, include a cardio piece (category=cardio) sized to close the gap. Two encodings:
+  - **Preferred: HR-zone breakdown.** Add a `target_zones` array of `{zone, minutes}` objects using Apple-Watch zones 1-5 (Z1 very light, Z2 easy aerobic, Z3 moderate, Z4 threshold, Z5 max). For zone 2 base work: `[{zone: 2, minutes: 30}]`. For intervals like "5 min warm-up Z1, 4×4 min Z4 with 3 min Z1 between, 5 min cool-down Z1": `[{zone: 1, minutes: 13}, {zone: 4, minutes: 16}]` (sum the per-zone time across the session). Set `reps_min` and `reps_max` to the **total** minutes (sum of all zone minutes) so the existing minutes target stays accurate, and `target_sets: 1`. Omit `weight`/RPE — the app shows per-zone inputs.
+  - **Fallback: total minutes + RPE.** If a zone breakdown isn't clearly warranted (e.g. casual "walk 20 min"), omit `target_zones`. Then `reps` is minutes and `weight` is RPE 1-10; `target_sets: 1`.
+  - Apply progressive overload either way — bump minutes ~5-10% or one zone notch up if the prior session was completed cleanly.
 - **Session time budget** — reserve ~5 min for cooldown stretches and ~5 min for balance work. If cardio is included, budget its minutes explicitly. Subtract all of these from `session_minutes` before budgeting strength sets.
 - **Order** — compounds before isolations, heaviest first. Balance work after main lifts. Cardio either as a warm-up (zone 2, before strength) or finisher (after strength, before cooldown). Stretching last (cooldown).
 
@@ -249,12 +252,25 @@ Wrap your reply in a single fenced ```json code block — nothing else, no comme
       "target_duration_seconds": 30,
       "rest_seconds": 10,
       "notes": "Hold each side 30s"
+    },
+    {
+      "library_id": "Running_Treadmill",
+      "name": "Running, Treadmill",
+      "target_sets": 1,
+      "reps_min": 29,
+      "reps_max": 29,
+      "target_zones": [
+        {"zone": 1, "minutes": 13},
+        {"zone": 4, "minutes": 16}
+      ],
+      "rest_seconds": 0,
+      "notes": "5 min Z1 warm-up · 4×4 min Z4 with 3 min Z1 between · 5 min Z1 cool-down"
     }
   ]
 }
 ```
 
-`library_id` is **required** for every exercise and must exactly match an `id` from the table above. `name` should match the library `name` for consistency. `notes` can be null. For stretching/balance exercises with timed holds, include `target_duration_seconds` — the app shows a seconds input instead of weight × reps. Order exercises in the sequence they should be performed.
+`library_id` is **required** for every exercise and must exactly match an `id` from the table above. `name` should match the library `name` for consistency. `notes` can be null. For stretching/balance exercises with timed holds, include `target_duration_seconds` — the app shows a seconds input instead of weight × reps. For cardio with a clear zone breakdown, include `target_zones` — the app shows one input per zone instead of min × RPE; otherwise omit it and the app falls back to `reps`=minutes + `weight`=RPE. Order exercises in the sequence they should be performed.
 
 ### Optional vitals block
 
@@ -375,7 +391,14 @@ pub fn cardio_minutes_in_window(
             continue;
         }
         for s in &e.sets {
-            if s.completed {
+            if !s.completed { continue; }
+            // Zone-shaped cardio: sum per-zone actual minutes.
+            // Legacy: `reps` stores minutes directly.
+            if let Some(zones) = &s.zone_minutes {
+                for z in zones {
+                    total = total.saturating_add(z.minutes);
+                }
+            } else {
                 total = total.saturating_add(s.reps);
             }
         }
@@ -475,6 +498,43 @@ pub fn parse_workout_response(
         workout,
         vitals: resp.vitals,
     })
+}
+
+// ── Cardio actuals (Apple Health screenshot → per-zone minutes) ─────────────
+
+/// Per-exercise zone-minute actuals returned by Claude when the user pastes
+/// an Apple Health workout summary screenshot.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct CardioActuals {
+    /// Library id (preferred) or exercise name to match against the active session.
+    #[serde(default)]
+    pub exercise_id: Option<String>,
+    #[serde(default)]
+    pub exercise_name: Option<String>,
+    pub zones: Vec<crate::models::ZoneTarget>,
+}
+
+#[derive(serde::Deserialize)]
+struct CardioActualsResponse {
+    cardio_actuals: CardioActuals,
+}
+
+/// Parse a fenced-or-raw JSON blob into a CardioActuals. Used by the
+/// session view's "paste cardio summary" textarea.
+pub fn parse_cardio_actuals(json: &str) -> Result<CardioActuals, String> {
+    let trimmed = json.trim();
+    let body = if let Some(rest) = trimmed.strip_prefix("```json") {
+        rest.trim_start().trim_end_matches("```").trim().to_string()
+    } else if let Some(rest) = trimmed.strip_prefix("```") {
+        rest.trim_start().trim_end_matches("```").trim().to_string()
+    } else {
+        trimmed.to_string()
+    };
+    // Accept either a wrapped {"cardio_actuals": {...}} or the bare object.
+    if let Ok(wrapped) = serde_json::from_str::<CardioActualsResponse>(&body) {
+        return Ok(wrapped.cardio_actuals);
+    }
+    serde_json::from_str(&body).map_err(|e| format!("JSON parse: {e}"))
 }
 
 /// Apply parsed vitals to the user's goals, dropping silently if the reading

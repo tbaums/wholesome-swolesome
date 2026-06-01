@@ -128,6 +128,8 @@ fn ActiveSession() -> impl IntoView {
                 children=move |ex_id| view! { <ExerciseCard ex_id=ex_id open_ex=open_ex/> }
             />
 
+            <CardioActualsImport/>
+
             <button
                 class="btn btn-finish btn-full"
                 style="margin-top:8px"
@@ -232,7 +234,7 @@ fn ExerciseCard(
                             completed: false,
                             completed_date: None,
                             duration_seconds: last.duration_seconds,
-                        });
+                            zone_minutes: None,                        });
                     }
                 }
             });
@@ -524,9 +526,80 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
             .is_some()
     };
 
+    // Read target_zones once at creation; doesn't change mid-session.
+    let zone_targets: Vec<crate::models::ZoneTarget> = state.active_session.get_untracked()
+        .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
+        .and_then(|e| e.target_zones)
+        .unwrap_or_default();
+    let is_zone_cardio = !zone_targets.is_empty();
+
     let is_done2 = is_done.clone();
 
-    if is_dur_static {
+    if is_zone_cardio {
+        let ex_id_for_zone = ex_id.clone();
+        view! {
+            <div class="set-row set-row-zones" class:set-done=is_done>
+                <span class="set-num">"Set " {set_idx + 1}</span>
+                <div class="zone-grid">
+                    {zone_targets.iter().map(|zt| {
+                        let zone = zt.zone;
+                        let target_min = zt.minutes;
+                        let ex_id = ex_id_for_zone.clone();
+                        let read_actual = {
+                            let ex_id = ex_id.clone();
+                            move || -> String {
+                                state.active_session.get()
+                                    .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
+                                    .and_then(|e| e.sets.get(set_idx).cloned())
+                                    .and_then(|s| s.zone_minutes)
+                                    .and_then(|zs| zs.into_iter().find(|z| z.zone == zone))
+                                    .map(|z| z.minutes.to_string())
+                                    .unwrap_or_default()
+                            }
+                        };
+                        let on_input = {
+                            let ex_id = ex_id.clone();
+                            move |e: leptos::ev::Event| {
+                                let val: u32 = event_target_value(&e).parse().unwrap_or(0);
+                                state.active_session.update(|opt| {
+                                    if let Some(s) = opt.as_mut() {
+                                        if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {
+                                            if let Some(set) = log.sets.get_mut(set_idx) {
+                                                let mut zm = set.zone_minutes.clone().unwrap_or_default();
+                                                if let Some(existing) = zm.iter_mut().find(|z| z.zone == zone) {
+                                                    existing.minutes = val;
+                                                } else {
+                                                    zm.push(crate::models::ZoneTarget { zone, minutes: val });
+                                                }
+                                                set.zone_minutes = Some(zm);
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        };
+                        view! {
+                            <div class="zone-row">
+                                <span class="zone-label">"Z" {zone}</span>
+                                <input
+                                    type="number"
+                                    inputmode="numeric"
+                                    step="1"
+                                    min="0"
+                                    class="set-num-input zone-input"
+                                    placeholder="min"
+                                    prop:value=read_actual
+                                    on:input=on_input
+                                />
+                                <span class="zone-target">"/ " {target_min} " min"</span>
+                            </div>
+                        }
+                    }).collect_view()}
+                </div>
+                <button class="set-done-btn" class:done=is_done2 on:click=toggle_done>"✓"</button>
+            </div>
+        }.into_any()
+    } else if is_dur_static {
         view! {
             <div class="set-row" class:set-done=is_done>
                 <span class="set-num">"Set " {set_idx + 1}</span>
@@ -642,5 +715,95 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                 <button class="set-done-btn" class:done=is_done2 on:click=toggle_done>"✓"</button>
             </div>
         }.into_any()
+    }
+}
+
+// ── Cardio actuals import (Apple Health screenshot path) ─────────────────────
+//
+// Visible only when at least one logged exercise has a `target_zones`
+// prescription. The user opens a Claude conversation, drops an Apple Health
+// workout summary screenshot in, asks for per-zone minutes as JSON, pastes
+// the response here. The importer matches the exercise (by id or name) and
+// writes the per-zone actuals into the last set's `zone_minutes`.
+#[component]
+fn CardioActualsImport() -> impl IntoView {
+    let state = expect_context::<AppState>();
+    let response_text: RwSignal<String> = RwSignal::new(String::new());
+    let status: RwSignal<Option<String>> = RwSignal::new(None);
+
+    let has_zone_targets = move || {
+        state.active_session.get()
+            .map(|s| s.exercise_logs.iter().any(|e|
+                e.target_zones.as_ref().is_some_and(|z| !z.is_empty())
+            ))
+            .unwrap_or(false)
+    };
+
+    let import = move |_| {
+        let text = response_text.get_untracked();
+        if text.trim().is_empty() {
+            status.set(Some("Paste Claude's JSON response first.".into()));
+            return;
+        }
+        match crate::coach::parse_cardio_actuals(&text) {
+            Ok(actuals) => {
+                let mut applied_to: Option<String> = None;
+                state.active_session.update(|opt| {
+                    let Some(session) = opt.as_mut() else { return; };
+                    // Match by library id first, then name.
+                    let target = session.exercise_logs.iter_mut().find(|log| {
+                        if let Some(id) = actuals.exercise_id.as_deref() {
+                            if log.exercise_id == id { return true; }
+                        }
+                        if let Some(name) = actuals.exercise_name.as_deref() {
+                            if log.exercise_name.to_lowercase() == name.to_lowercase() { return true; }
+                        }
+                        false
+                    });
+                    let Some(log) = target else { return; };
+                    if log.target_zones.is_none() { return; }
+                    if let Some(set) = log.sets.last_mut() {
+                        set.zone_minutes = Some(actuals.zones.clone());
+                    }
+                    applied_to = Some(log.exercise_name.clone());
+                });
+                match applied_to {
+                    Some(name) => {
+                        status.set(Some(format!("✓ Wrote zone actuals to '{name}'")));
+                        response_text.set(String::new());
+                        state.show_toast("Cardio actuals imported");
+                    }
+                    None => status.set(Some("✗ No matching cardio exercise in this session.".into())),
+                }
+            }
+            Err(e) => status.set(Some(format!("✗ {e}"))),
+        }
+    };
+
+    view! {
+        {move || has_zone_targets().then(|| view! {
+            <div class="cardio-import-card">
+                <div class="ci-title">"Paste Apple Health cardio summary"</div>
+                <div class="ci-blurb">
+                    "Open a Claude conversation. Drop in your Apple Health workout-summary screenshot. "
+                    "Ask: \"Return per-zone minutes as a fenced json code block: "
+                    "{\"cardio_actuals\":{\"exercise_id\":\"<library id>\",\"zones\":[{\"zone\":1,\"minutes\":5},...]}}.\""
+                    " Paste the response below."
+                </div>
+                <textarea
+                    placeholder="{ &quot;cardio_actuals&quot;: { ... } }"
+                    prop:value=move || response_text.get()
+                    on:input=move |e| response_text.set(event_target_value(&e))
+                />
+                {move || status.get().map(|s| view! {
+                    <div class="text-sm" style="margin-top:6px">{s}</div>
+                })}
+                <button
+                    class="btn btn-primary btn-full"
+                    style="margin-top:8px"
+                    on:click=import
+                >"Import cardio actuals"</button>
+            </div>
+        })}
     }
 }

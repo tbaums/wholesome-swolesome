@@ -31,7 +31,7 @@ fn get_or_create_freeform(
         .map(|s| (s.weight, s.reps))
         .unwrap_or((0.0, reps_min));
     let sets = (1..=target_sets)
-        .map(|n| SetLog { set_number: n, reps: dr, weight: dw, completed: false, completed_date: None, duration_seconds: None })
+        .map(|n| SetLog { set_number: n, reps: dr, weight: dw, completed: false, completed_date: None, duration_seconds: None, zone_minutes: None })
         .collect();
     h.push(ExerciseEntry {
         id: uuid::Uuid::new_v4().to_string(),
@@ -379,7 +379,7 @@ fn ExerciseFreeformCard(
                     completed: false,
                     completed_date: None,
                     duration_seconds: None,
-                });
+                    zone_minutes: None,                });
             });
         }
     };

@@ -149,6 +149,7 @@ mod tests {
                 rest_seconds: 180,
                 notes: Some("RPE 7".into()),
                 target_duration_seconds: None,
+                target_zones: None,
             }],
             created_at: "2026-05-22T23:00:00.000Z".into(),
         });
@@ -432,7 +433,7 @@ mod tests {
                 completed: true,
                 completed_date: Some("2026-04-01".into()),
                 duration_seconds: None,
-            }],
+                zone_minutes: None,            }],
             finalized: true,
             target_duration_seconds: None,
         };
@@ -466,7 +467,7 @@ mod tests {
                 completed: true,
                 completed_date: Some("2026-05-31".into()),
                 duration_seconds: None,
-            }],
+                zone_minutes: None,            }],
             finalized: true,
             target_duration_seconds: None,
         };
@@ -625,7 +626,7 @@ mod tests {
                 completed: true,
                 completed_date: Some(recent_date.into()),
                 duration_seconds: None,
-            }],
+                zone_minutes: None,            }],
         };
         let non_finalized = ExerciseEntry {
             id: "e2".into(),
@@ -644,7 +645,7 @@ mod tests {
                 completed: false,
                 completed_date: None,
                 duration_seconds: None,
-            }],
+                zone_minutes: None,            }],
             ..finalized_completed.clone()
         };
 
@@ -689,7 +690,7 @@ mod tests {
             completed: true,
             completed_date: None,
             duration_seconds: Some(45),
-        };
+            zone_minutes: None,        };
         let json = serde_json::to_string(&set).unwrap();
         let parsed: crate::models::SetLog = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.duration_seconds, Some(45));
@@ -914,8 +915,8 @@ mod tests {
             reps_min: 20,
             reps_max: 40,
             sets: vec![
-                crate::models::SetLog { set_number: 1, reps: 30, weight: 6.0, completed: true, completed_date: None, duration_seconds: None },
-                crate::models::SetLog { set_number: 2, reps: 99, weight: 9.0, completed: false, completed_date: None, duration_seconds: None },
+                crate::models::SetLog { set_number: 1, reps: 30, weight: 6.0, completed: true, completed_date: None, duration_seconds: None, zone_minutes: None },
+                crate::models::SetLog { set_number: 2, reps: 99, weight: 9.0, completed: false, completed_date: None, duration_seconds: None, zone_minutes: None },
             ],
             finalized: true,
             created_at: "2026-05-26T10:00:00.000Z".into(),
@@ -933,7 +934,7 @@ mod tests {
             target_sets: 3,
             reps_min: 5,
             reps_max: 5,
-            sets: vec![crate::models::SetLog { set_number: 1, reps: 5, weight: 225.0, completed: true, completed_date: None, duration_seconds: None }],
+            sets: vec![crate::models::SetLog { set_number: 1, reps: 5, weight: 225.0, completed: true, completed_date: None, duration_seconds: None, zone_minutes: None }],
             finalized: true,
             created_at: "2026-05-26T10:30:00.000Z".into(),
             target_duration_seconds: None,
@@ -969,7 +970,7 @@ mod tests {
             day_id: None,
             day_name: None,
             target_sets: 2, reps_min: 1, reps_max: 1,
-            sets: vec![crate::models::SetLog { set_number: 1, reps: 1, weight: 0.0, completed: true, completed_date: None, duration_seconds: Some(30) }],
+            sets: vec![crate::models::SetLog { set_number: 1, reps: 1, weight: 0.0, completed: true, completed_date: None, duration_seconds: Some(30), zone_minutes: None }],
             finalized: true,
             created_at: "2026-05-26T10:00:00.000Z".into(),
             target_duration_seconds: Some(30),
@@ -983,7 +984,7 @@ mod tests {
             day_id: None,
             day_name: None,
             target_sets: 3, reps_min: 5, reps_max: 5,
-            sets: vec![crate::models::SetLog { set_number: 1, reps: 5, weight: 225.0, completed: true, completed_date: None, duration_seconds: None }],
+            sets: vec![crate::models::SetLog { set_number: 1, reps: 5, weight: 225.0, completed: true, completed_date: None, duration_seconds: None, zone_minutes: None }],
             finalized: true,
             created_at: "2026-05-27T10:00:00.000Z".into(),
             target_duration_seconds: None,
@@ -1051,7 +1052,7 @@ mod tests {
                 completed,
                 completed_date: if completed { Some("2026-05-29".into()) } else { None },
                 duration_seconds: None,
-            }],
+                zone_minutes: None,            }],
             finalized: true,
             target_duration_seconds: None,
         }
@@ -1111,7 +1112,7 @@ mod tests {
                     completed: true,
                     completed_date: Some("2026-01-01".into()),
                     duration_seconds: Some(30),
-                },
+                    zone_minutes: None,                },
             ],
             finalized: true,
             created_at: "2026-01-01T00:00:00.000Z".into(),
@@ -1143,7 +1144,7 @@ mod tests {
                     completed: true,
                     completed_date: None,
                     duration_seconds: None,
-                },
+                    zone_minutes: None,                },
             ],
             finalized: true,
             created_at: "2026-01-01T00:00:00.000Z".into(),
@@ -1166,5 +1167,87 @@ mod tests {
         assert_eq!(recency_bucket(8), Some(crate::library::RecencyBucket::TwoWeeks));
         assert_eq!(recency_bucket(14), Some(crate::library::RecencyBucket::TwoWeeks));
         assert_eq!(recency_bucket(15), Some(crate::library::RecencyBucket::Stale));
+    }
+
+    // ── Zone-shaped cardio ────────────────────────────────────────────────────
+
+    #[wasm_bindgen_test]
+    fn zone_minutes_sum_into_cardio_total_when_present() {
+        use crate::coach::cardio_minutes_in_window;
+        use crate::models::ZoneTarget;
+        let lib = vec![lib_entry_with_cat("Running_Treadmill", "Running, Treadmill", "cardio")];
+        let entry = ExerciseEntry {
+            id: "c1".into(),
+            date: "2026-05-27".into(),
+            exercise_name: "Running, Treadmill".into(),
+            exercise_id: "Running_Treadmill".into(),
+            session_id: None, day_id: None, day_name: None,
+            target_sets: 1, reps_min: 29, reps_max: 29,
+            sets: vec![crate::models::SetLog {
+                set_number: 1, reps: 29, weight: 0.0,
+                completed: true, completed_date: None,
+                duration_seconds: None,
+                // Per-zone actuals sum to 13 + 16 = 29.
+                zone_minutes: Some(vec![
+                    ZoneTarget { zone: 1, minutes: 13 },
+                    ZoneTarget { zone: 4, minutes: 16 },
+                ]),
+            }],
+            finalized: true,
+            created_at: "2026-05-27T10:00:00.000Z".into(),
+            target_duration_seconds: None,
+        };
+        let total = cardio_minutes_in_window(&[entry], &lib, "2026-05-28", 7);
+        assert_eq!(total, 29, "zone-minutes should be summed, not double-counted with reps");
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_cardio_actuals_accepts_fenced_wrapped_json() {
+        use crate::coach::parse_cardio_actuals;
+        let input = "```json\n{\"cardio_actuals\":{\"exercise_id\":\"Running_Treadmill\",\"zones\":[{\"zone\":1,\"minutes\":5},{\"zone\":4,\"minutes\":20}]}}\n```";
+        let parsed = parse_cardio_actuals(input).expect("should parse fenced wrapped form");
+        assert_eq!(parsed.exercise_id.as_deref(), Some("Running_Treadmill"));
+        assert_eq!(parsed.zones.len(), 2);
+        assert_eq!(parsed.zones[0].zone, 1);
+        assert_eq!(parsed.zones[0].minutes, 5);
+        assert_eq!(parsed.zones[1].zone, 4);
+        assert_eq!(parsed.zones[1].minutes, 20);
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_cardio_actuals_accepts_bare_object() {
+        use crate::coach::parse_cardio_actuals;
+        let input = r#"{"exercise_name":"Running, Treadmill","zones":[{"zone":2,"minutes":30}]}"#;
+        let parsed = parse_cardio_actuals(input).expect("bare object form should parse");
+        assert_eq!(parsed.exercise_name.as_deref(), Some("Running, Treadmill"));
+        assert_eq!(parsed.zones.len(), 1);
+    }
+
+    #[wasm_bindgen_test]
+    fn coach_response_with_target_zones_parses() {
+        use crate::coach::parse_workout_response;
+        let lib = vec![lib_entry_with_cat("Running_Treadmill", "Running, Treadmill", "cardio")];
+        let body = r#"```json
+        {
+          "name": "Zone 2 base",
+          "rationale": "easy aerobic",
+          "exercises": [{
+            "library_id": "Running_Treadmill",
+            "name": "Running, Treadmill",
+            "target_sets": 1,
+            "reps_min": 30,
+            "reps_max": 30,
+            "rest_seconds": 0,
+            "notes": null,
+            "target_zones": [{"zone": 2, "minutes": 30}]
+          }]
+        }
+        ```"#;
+        let parsed = parse_workout_response(body, "2026-05-31", "2026-05-30T22:00:00Z", &lib)
+            .expect("should accept target_zones in prescription");
+        let zones = parsed.workout.exercises[0].target_zones.as_ref().expect("target_zones present");
+        assert_eq!(zones.len(), 1);
+        assert_eq!(zones[0].zone, 2);
+        assert_eq!(zones[0].minutes, 30);
     }
 }
