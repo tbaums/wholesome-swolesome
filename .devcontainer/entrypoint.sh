@@ -71,7 +71,7 @@ fi
 
 if [[ -r "${git_id_src}" ]]; then
   # Parse the K=V file line-by-line rather than `source`-ing it: values may
-  # contain spaces (e.g. "Michael Tanenbaum") which sourcing would mis-split.
+  # contain spaces (e.g. "Jane Doe") which sourcing would mis-split.
   git_user_name=""
   git_user_email=""
   while IFS='=' read -r k v; do

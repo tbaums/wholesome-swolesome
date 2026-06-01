@@ -22,7 +22,7 @@ The shell that invokes you sets these env vars; if they're missing, fall back to
 
 | Var | Default | Meaning |
 |---|---|---|
-| `WS_DATA_REPO` | `tbaums/wholesome-swolesome-data` | private repo holding `state.json` |
+| `WS_DATA_REPO` | `you/wholesome-swolesome-data` | private repo holding `state.json` (set this) |
 | `WS_DATA_BRANCH` | `main` | branch to read/write |
 | `WS_DATA_PATH` | `state.json` | path within the data repo |
 | `WS_APP_REPO` | `tbaums/wholesome-swolesome` | this repo, source of the library |

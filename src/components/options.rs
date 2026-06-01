@@ -16,7 +16,7 @@ pub fn OptionsView() -> impl IntoView {
     let saved = storage::load_sync_config();
     let token = RwSignal::new(saved.token);
     let repo = RwSignal::new(if saved.repo.is_empty() {
-        "tbaums/wholesome-swolesome-data".to_string()
+        "you/wholesome-swolesome-data".to_string()
     } else {
         saved.repo
     });

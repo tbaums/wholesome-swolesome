@@ -95,7 +95,7 @@ test.describe('Options view — sync configuration', () => {
     await expect(page.locator('input[type="text"]').nth(1)).toHaveValue('main');
     await expect(page.locator('input[type="text"]').nth(2)).toHaveValue('state.json');
     // Default repo placeholder name is filled
-    await expect(page.locator('input[type="text"]').first()).toHaveValue('tbaums/wholesome-swolesome-data');
+    await expect(page.locator('input[type="text"]').first()).toHaveValue('you/wholesome-swolesome-data');
   });
 
   test('Test connection: success path renders the sha confirmation', async ({ page }) => {

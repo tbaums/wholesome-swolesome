@@ -7,10 +7,10 @@ import * as fs from 'fs';
 //    with primary/secondary muscles highlighted.
 //  - A workout whose exercise names match library entries (Barbell Squat,
 //    Romanian Deadlift, etc.) colors the corresponding lower-body muscles
-//    on the History heatmap after the session is logged. The transfemme
-//    walkthrough only exercises name-matching for a few muscles; this one
-//    is specifically a regression net for the heatmap-coloring path on
-//    quads + glutes + hamstrings + calves.
+//    on the History heatmap after the session is logged. The main
+//    hypertrophy walkthrough only exercises name-matching for a few
+//    muscles; this one is specifically a regression net for the
+//    heatmap-coloring path on quads + glutes + hamstrings + calves.
 
 const BASE = 'http://localhost:8080';
 const SHOTS_DIR = path.join(__dirname, 'screenshots', 'walkthrough_legday');

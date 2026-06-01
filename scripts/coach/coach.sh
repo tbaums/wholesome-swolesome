@@ -11,14 +11,14 @@
 #   WS_TARGET_DATE=2026-05-25 scripts/coach/coach.sh
 #
 # Env overrides (defaults shown):
-#   WS_DATA_REPO=tbaums/wholesome-swolesome-data
+#   WS_DATA_REPO=you/wholesome-swolesome-data   # SET THIS for your private data repo
 #   WS_DATA_BRANCH=main
 #   WS_DATA_PATH=state.json
-#   WS_APP_REPO=tbaums/wholesome-swolesome
+#   WS_APP_REPO=tbaums/wholesome-swolesome      # the public app repo (don't change)
 
 set -euo pipefail
 
-WS_DATA_REPO="${WS_DATA_REPO:-tbaums/wholesome-swolesome-data}"
+WS_DATA_REPO="${WS_DATA_REPO:-you/wholesome-swolesome-data}"
 WS_DATA_BRANCH="${WS_DATA_BRANCH:-main}"
 WS_DATA_PATH="${WS_DATA_PATH:-state.json}"
 WS_APP_REPO="${WS_APP_REPO:-tbaums/wholesome-swolesome}"

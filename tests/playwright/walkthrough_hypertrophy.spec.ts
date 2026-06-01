@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 const BASE = 'http://localhost:8080';
-const SHOTS_DIR = path.join(__dirname, 'screenshots', 'walkthrough_transfemme');
+const SHOTS_DIR = path.join(__dirname, 'screenshots', 'walkthrough_hypertrophy');
 
 fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
@@ -16,14 +16,13 @@ async function shot(page: Page, label: string) {
   console.log(`  📸 ${path.basename(file)}`);
 }
 
-// The user's prompt, hand-translated into a structured workout request.
-// Femme-shaping bias: glutes / hams / hip width / posterior chain / posture,
-// deemphasize lat width, trap bulk, chest mass, and direct biceps volume.
+// Generic hypertrophy lower-body + posture day. Library IDs are real entries
+// from /public/data/exercises.json so the import path exercises the validator.
 const COACH_RESPONSE = JSON.stringify(
   {
-    name: 'Glutes + Posterior Chain (Femme-Shaping Day 1)',
+    name: 'Lower Body Hypertrophy + Posture',
     rationale:
-      'Prioritizes glute medius/maximus, hamstrings, and hip abductors to build the curve through hips and seat. Adds upper-back posture work (face pulls, rear-delt flyes) so shoulders sit back and chest opens without adding lat flare. Skips direct biceps, heavy pressing, and shrugs — those reinforce the V-taper / trap bulk you want to deemphasize. 60-min total, hypertrophy rep ranges, moderate rest.',
+      'Glutes, hamstrings, and hip abductors with a mix of compound and isolation, plus rear-delt and mid-back work for posture. Skips direct biceps and heavy pressing this session to balance the weekly split. ~60 min total, hypertrophy rep ranges, moderate rest.',
     exercises: [
       {
         library_id: 'Barbell_Glute_Bridge',
@@ -41,7 +40,7 @@ const COACH_RESPONSE = JSON.stringify(
         reps_min: 8,
         reps_max: 10,
         rest_seconds: 120,
-        notes: 'Hinge bias — hamstrings + glute fibers, minimal lower-back drive.',
+        notes: 'Hinge bias — hamstrings and glute fibers, minimal lower-back drive.',
       },
       {
         library_id: 'Thigh_Abductor',
@@ -50,7 +49,7 @@ const COACH_RESPONSE = JSON.stringify(
         reps_min: 12,
         reps_max: 15,
         rest_seconds: 60,
-        notes: 'Glute medius — builds hip width / shelf above the seat.',
+        notes: 'Glute medius — builds lateral hip strength.',
       },
       {
         library_id: 'Barbell_Walking_Lunge',
@@ -68,7 +67,7 @@ const COACH_RESPONSE = JSON.stringify(
         reps_min: 12,
         reps_max: 15,
         rest_seconds: 60,
-        notes: 'Rear delts + external rotation — posture, opens chest without bulking pecs.',
+        notes: 'Rear delts and external rotation — shoulder health and posture.',
       },
       {
         library_id: 'Seated_Cable_Rows',
@@ -77,7 +76,7 @@ const COACH_RESPONSE = JSON.stringify(
         reps_min: 12,
         reps_max: 15,
         rest_seconds: 60,
-        notes: 'Mid-back thickness for posture; avoid wide-grip lat work that flares the back.',
+        notes: 'Mid-back thickness for posture.',
       },
     ],
   },
@@ -93,7 +92,7 @@ async function freshFromBase(page: Page) {
   await page.waitForSelector('.bottom-nav');
 }
 
-test.describe('Transfemme walkthrough', () => {
+test.describe('Hypertrophy walkthrough', () => {
   test('full goal → coach → session → history flow', async ({ page }) => {
     test.setTimeout(120_000);
 
@@ -139,16 +138,16 @@ test.describe('Transfemme walkthrough', () => {
       await page.locator('.goal-pill').filter({ hasText: new RegExp(`^${eq}$`) }).click();
     }
 
-    // ── 9. Notes textarea — the user's actual prompt ──────────────────────────
+    // ── 9. Notes textarea — a generic athletic-shape prompt ──────────────────
     const textareas = page.locator('.card textarea');
     // avoid box first
     await textareas.nth(0).fill(
-      'No heavy direct biceps work, no shrugs, no wide-grip pulldowns. Avoid anything that thickens lats or traps.',
+      'Left shoulder limitation — no heavy overhead pressing.',
     );
     await textareas.nth(0).press('Tab');
     // notes box second
     await textareas.nth(1).fill(
-      "I'm a transfemme person trying to maximize a femme silhouette and deemphasize my muscley masc default. Bias glutes, hamstrings, hip abductors, and posture (rear delts, mid-back). Avoid lat width, trap bulk, chest mass, and direct biceps volume. Aesthetics over strength PRs.",
+      'Hypertrophy focus; balanced push/pull. Prefer compound lifts. Building glutes and posterior chain for athletic shape.',
     );
     await textareas.nth(1).press('Tab');
 
