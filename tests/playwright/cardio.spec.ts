@@ -164,9 +164,25 @@ test.describe('Cardio actuals import card', () => {
 
   test('copy button puts the prompt onto the clipboard with the right library_id', async ({
     page,
-    context,
   }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    // Stub navigator.clipboard.writeText into a window-scoped variable. WebKit
+    // refuses the `clipboard-write` permission in headless contexts (CI uses
+    // WebKit/iPhone 15), so we intercept the call instead of granting perms.
+    await page.addInitScript(() => {
+      (window as unknown as { __clipboard: string }).__clipboard = '';
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text: string) => {
+            (window as unknown as { __clipboard: string }).__clipboard = text;
+            return Promise.resolve();
+          },
+          readText: () =>
+            Promise.resolve((window as unknown as { __clipboard: string }).__clipboard),
+        },
+      });
+    });
+
     await enableDateMock(page, MOCK_NOW);
     await page.goto(BASE);
     await page.waitForSelector('.bottom-nav');
@@ -189,11 +205,12 @@ test.describe('Cardio actuals import card', () => {
     await expect(card.locator('.ci-prompt')).not.toContainText('<library_id>');
     await expect(card.locator('.ci-prompt')).toContainText('cardio_actuals');
 
-    // Tap copy → clipboard contains the prompt text.
+    // Tap copy → stub records the prompt text.
     await card.locator('.ci-copy-btn').click();
-    // Toast confirms.
     await expect(page.locator('.toast')).toContainText('Prompt copied');
-    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    const clipboard = await page.evaluate(
+      () => (window as unknown as { __clipboard: string }).__clipboard,
+    );
     expect(clipboard).toContain('Running_Treadmill');
     expect(clipboard).toContain('cardio_actuals');
     expect(clipboard).toContain('Apple Health');
