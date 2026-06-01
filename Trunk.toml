@@ -6,6 +6,6 @@ dist = "dist"
 ignore = ["dist", ".git"]
 
 [serve]
-port = 8080
+port = 8081
 open = false
 addresses = ["127.0.0.1"]

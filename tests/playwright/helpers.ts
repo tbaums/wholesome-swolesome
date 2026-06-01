@@ -35,7 +35,7 @@ export function localDateStr(isoStr: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export const BASE = 'http://localhost:8080';
+export const BASE = 'http://localhost:8081';
 
 /** Reset localStorage and reload so every test starts from a known blank state. */
 export async function freshPage(page: Page) {

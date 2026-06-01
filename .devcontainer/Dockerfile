@@ -91,7 +91,7 @@ RUN chmod 0755 /usr/local/bin/devcontainer-entrypoint
 USER node
 
 WORKDIR /workspace
-EXPOSE 8080
+EXPOSE 8081
 
 ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint"]
 CMD ["sleep", "infinity"]

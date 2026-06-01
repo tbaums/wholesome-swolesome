@@ -45,7 +45,7 @@ After that, the app debounces a push 2 seconds after any data change, and pulls 
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install trunk
-trunk serve              # dev server at http://localhost:8080
+trunk serve              # dev server at http://localhost:8081
 trunk build --release    # production build into ./dist
 ```
 

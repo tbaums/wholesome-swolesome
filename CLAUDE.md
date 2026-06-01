@@ -16,7 +16,7 @@ rustup target add wasm32-unknown-unknown
 cargo install trunk
 
 # Dev (auto-rebuild + auto-reload)
-trunk serve                               # http://localhost:8080
+trunk serve                               # http://localhost:8081
 
 # Production
 trunk build --release

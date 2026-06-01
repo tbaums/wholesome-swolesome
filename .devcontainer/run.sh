@@ -4,7 +4,7 @@
 # Usage:
 #   ./.devcontainer/run.sh                 # interactive bash in /workspace
 #   ./.devcontainer/run.sh claude --dangerously-skip-permissions
-#   ./.devcontainer/run.sh trunk serve     # then visit http://localhost:8080
+#   ./.devcontainer/run.sh trunk serve     # then visit http://localhost:8081
 #
 # The container is kept running in the background so multiple shells can
 # attach (e.g. one for `trunk serve`, one for `claude`).

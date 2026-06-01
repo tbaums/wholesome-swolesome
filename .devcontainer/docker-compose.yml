@@ -11,7 +11,7 @@ services:
     working_dir: /workspace
     ports:
       # trunk serve default
-      - "8080:8080"
+      - "8081:8081"
     volumes:
       # Repo bind-mount (read/write). Host = ../  relative to this file.
       - ../:/workspace
@@ -50,7 +50,7 @@ services:
       - cargo-registry:/home/node/.cargo/registry
       - cargo-git:/home/node/.cargo/git
       - target-cache:/home/node/target
-    # Bind trunk serve to all interfaces so the host can reach :8080.
+    # Bind trunk serve to all interfaces so the host can reach :8081.
     # CARGO_TARGET_DIR routes builds into the relocated target-cache volume.
     environment:
       - TRUNK_SERVE_ADDRESS=0.0.0.0
