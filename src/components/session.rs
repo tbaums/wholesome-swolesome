@@ -739,6 +739,40 @@ fn CardioActualsImport() -> impl IntoView {
             .unwrap_or(false)
     };
 
+    // Prompt to send to Claude alongside the Apple Health screenshot.
+    // If exactly one cardio exercise in this session has target_zones, embed
+    // its library_id verbatim so Claude doesn't have to guess.
+    let prompt_text = move || -> String {
+        let zone_exs: Vec<(String, String)> = state.active_session.get()
+            .map(|s| s.exercise_logs.iter()
+                .filter(|e| e.target_zones.as_ref().is_some_and(|z| !z.is_empty()))
+                .map(|e| (e.exercise_id.clone(), e.exercise_name.clone()))
+                .collect())
+            .unwrap_or_default();
+        let (id_token, name_hint) = match zone_exs.as_slice() {
+            [(id, name)] => (id.as_str(), format!(" The exercise is \"{name}\"; use that exact library_id.")),
+            _ => ("<library_id>", String::new()),
+        };
+        format!(
+            "Here's my Apple Health workout-summary screenshot. Return the per-zone heart-rate minutes \
+             from it as a single fenced ```json code block, nothing else:\n\
+             \n\
+             ```json\n\
+             {{\"cardio_actuals\":{{\"exercise_id\":\"{id_token}\",\"zones\":[{{\"zone\":1,\"minutes\":<N>}},{{\"zone\":2,\"minutes\":<N>}},{{\"zone\":3,\"minutes\":<N>}},{{\"zone\":4,\"minutes\":<N>}},{{\"zone\":5,\"minutes\":<N>}}]}}}}\n\
+             ```\n\
+             \n\
+             Use Apple's zone numbering 1–5. Omit any zone with 0 minutes.{name_hint}"
+        )
+    };
+
+    let copy_prompt = move |_| {
+        let text = prompt_text();
+        if let Some(window) = web_sys::window() {
+            let _ = window.navigator().clipboard().write_text(&text);
+            state.show_toast("Prompt copied — paste into Claude with your screenshot");
+        }
+    };
+
     let import = move |_| {
         let text = response_text.get_untracked();
         if text.trim().is_empty() {
@@ -785,10 +819,11 @@ fn CardioActualsImport() -> impl IntoView {
             <div class="cardio-import-card">
                 <div class="ci-title">"Paste Apple Health cardio summary"</div>
                 <div class="ci-blurb">
-                    "Open a Claude conversation. Drop in your Apple Health workout-summary screenshot. "
-                    "Ask: \"Return per-zone minutes as a fenced json code block: "
-                    "{\"cardio_actuals\":{\"exercise_id\":\"<library id>\",\"zones\":[{\"zone\":1,\"minutes\":5},...]}}.\""
-                    " Paste the response below."
+                    "1. Copy the prompt below. 2. Open a Claude conversation, paste the prompt, drop in your Apple Health workout-summary screenshot. 3. Paste Claude's response in the box below."
+                </div>
+                <div class="ci-prompt-wrap">
+                    <pre class="ci-prompt">{prompt_text}</pre>
+                    <button class="ci-copy-btn" on:click=copy_prompt aria-label="Copy prompt">"📋 Copy"</button>
                 </div>
                 <textarea
                     placeholder="{ &quot;cardio_actuals&quot;: { ... } }"

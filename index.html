@@ -457,6 +457,44 @@
       color: var(--text-muted);
       line-height: 1.4;
     }
+    .cardio-import-card .ci-prompt-wrap {
+      position: relative;
+      margin-top: 8px;
+    }
+    .cardio-import-card .ci-prompt {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      padding-right: 76px;       /* leave room for the copy button */
+      margin: 0;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 10.5px;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.45;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .cardio-import-card .ci-copy-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      padding: 4px 10px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s;
+    }
+    .cardio-import-card .ci-copy-btn:active {
+      background: var(--surface2);
+    }
 
     /* ── Exercise complete button (single, always present) ── */
     .ex-complete-btn {
