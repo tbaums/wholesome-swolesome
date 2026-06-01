@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 
-const BASE = 'http://localhost:8080';
+const BASE = 'http://localhost:8081';
 const SHOTS_DIR = path.join(__dirname, 'screenshots', 'walkthrough_hypertrophy');
 
 fs.mkdirSync(SHOTS_DIR, { recursive: true });

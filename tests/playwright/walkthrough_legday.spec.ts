@@ -12,7 +12,7 @@ import * as fs from 'fs';
 //    muscles; this one is specifically a regression net for the
 //    heatmap-coloring path on quads + glutes + hamstrings + calves.
 
-const BASE = 'http://localhost:8080';
+const BASE = 'http://localhost:8081';
 const SHOTS_DIR = path.join(__dirname, 'screenshots', 'walkthrough_legday');
 fs.mkdirSync(SHOTS_DIR, { recursive: true });
 

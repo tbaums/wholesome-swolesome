@@ -3,7 +3,7 @@ import { enableDateMock, freshPage, localDateStr } from './helpers';
 
 const MOCK_NOW = '2026-06-10T12:00:00.000Z';
 const TODAY = localDateStr(MOCK_NOW);
-const BASE = 'http://localhost:8080';
+const BASE = 'http://localhost:8081';
 
 // A response payload that mirrors what Claude returns: a workout
 // plus an optional top-level `vitals` block extracted from an

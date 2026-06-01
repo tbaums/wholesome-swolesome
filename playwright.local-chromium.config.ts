@@ -19,14 +19,14 @@ export default defineConfig({
       use: {
         ...devices['Pixel 5'],
         serviceWorkers: 'block',
-        baseURL: 'http://localhost:8080',
+        baseURL: 'http://localhost:8081',
       },
     },
   ],
   webServer: {
     // --no-autoreload prevents trunk from reloading the page mid-test.
     command: `${process.env.TRUNK ?? 'trunk'} serve --no-autoreload`,
-    url: 'http://localhost:8080',
+    url: 'http://localhost:8081',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

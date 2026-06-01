@@ -5,7 +5,7 @@
       "name": "trunk-serve",
       "runtimeExecutable": "trunk",
       "runtimeArgs": ["serve", "--release"],
-      "port": 8080
+      "port": 8081
     }
   ]
 }

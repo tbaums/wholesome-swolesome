@@ -21,7 +21,7 @@ export default defineConfig({
   ],
   webServer: {
     command: `${process.env.TRUNK ?? 'trunk'} serve --no-autoreload`,
-    url: 'http://localhost:8080',
+    url: 'http://localhost:8081',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
