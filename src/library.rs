@@ -108,22 +108,45 @@ pub fn is_cardio_exercise(
     category_of(exercise_id, exercise_name, library) == Some("cardio")
 }
 
-/// True if the named exercise is in the library with `equipment == "body only"` —
-/// i.e., a bodyweight movement (push-ups, pull-ups, dips, plank). Used to hide the
-/// weight input from set rows so the user only logs reps. Exercises not found in the
-/// library default to false, so freeform / custom entries keep the standard weight × reps
-/// inputs unless the user explicitly imports them from a `body only` library entry.
+/// Body-only library entries where adding external weight is common and the
+/// UI should still expose the weight input. The library's `equipment` field
+/// is too coarse here — pull-ups, dips, weighted crunches etc. all tag as
+/// `body only` even though people routinely load them with a plate or belt.
+/// Keep this list tight and curated; the unmatched-default for body-only is
+/// still "no weight input" (Plank, Air Bike, Bird Dog, isometric holds, …).
+pub const WEIGHTABLE_BODYWEIGHT_IDS: &[&str] = &[
+    "Bench_Dips",
+    "Chin-Up",
+    "Decline_Crunch",
+    "Dips_-_Triceps_Version",
+    "Hanging_Leg_Raise",
+    "Hyperextensions_With_No_Hyperextension_Bench",
+    "Pullups",
+    "Pushups",
+    "Russian_Twist",
+    "V-Bar_Pullup",
+];
+
+/// True if the named exercise is in the library with `equipment == "body only"`
+/// AND is not on the [`WEIGHTABLE_BODYWEIGHT_IDS`] allow-list. Used to hide the
+/// weight input from set rows so the user only logs reps. Exercises not found in
+/// the library default to false, so freeform / custom entries keep the standard
+/// weight × reps inputs unless the user explicitly imports them from a `body only`
+/// library entry that isn't on the allow-list.
 pub fn is_bodyweight_exercise(
     exercise_id: &str,
     exercise_name: &str,
     library: &[LibraryExercise],
 ) -> bool {
     let name_lc = exercise_name.to_lowercase();
-    library
+    let entry = library
         .iter()
-        .find(|e| e.id == exercise_id || e.name.to_lowercase() == name_lc)
-        .and_then(|e| e.equipment.as_deref())
-        .is_some_and(|eq| eq == "body only")
+        .find(|e| e.id == exercise_id || e.name.to_lowercase() == name_lc);
+    let Some(entry) = entry else { return false };
+    if WEIGHTABLE_BODYWEIGHT_IDS.contains(&entry.id.as_str()) {
+        return false;
+    }
+    entry.equipment.as_deref().is_some_and(|eq| eq == "body only")
 }
 
 // ── Muscle aggregation from history ──────────────────────────────────────────

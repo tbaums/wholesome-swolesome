@@ -5,24 +5,25 @@ const MOCK_NOW = '2026-06-10T12:00:00.000Z';
 const TODAY = localDateStr(MOCK_NOW);
 const BASE = 'http://localhost:8081';
 
-// A scheduled workout mixing one body-only exercise (Pullups, id: "Pullups",
-// equipment: "body only" in public/data/exercises.json) and one barbell
-// exercise (Bench Press) so a single spec exercises both render paths.
+// A scheduled workout mixing one body-only exercise that's GENUINELY weightless
+// (Plank — equipment: "body only", category: "strength", and not on the
+// WEIGHTABLE_BODYWEIGHT_IDS allow-list) and one barbell exercise so a single
+// spec exercises both render paths.
 function mixedWorkout(date: string) {
   return {
     id: 'w-mix',
     date,
-    name: 'Bodyweight + Bench',
+    name: 'Plank + Bench',
     rationale: '',
     source: 'Coach',
     exercises: [
       {
-        library_id: 'Pullups',
-        name: 'Pullups',
+        library_id: 'Plank',
+        name: 'Plank',
         target_sets: 3,
-        reps_min: 5,
-        reps_max: 10,
-        rest_seconds: 90,
+        reps_min: 30,
+        reps_max: 60,
+        rest_seconds: 60,
         notes: null,
       },
       {
@@ -53,20 +54,19 @@ async function startMixedSession(page: import('@playwright/test').Page) {
 }
 
 test.describe('Bodyweight exercises hide the weight input', () => {
-  test('session view: body-only exercise renders ONLY a reps input per set; barbell still renders two', async ({ page }) => {
+  test('session view: weightless body-only exercise renders ONLY a reps input; barbell still renders two', async ({ page }) => {
     await startMixedSession(page);
 
-    // Bodyweight first, then barbell — matching the seeded order.
-    const pullups = page.locator('.ex-card').filter({ hasText: 'Pullups' });
+    const plank = page.locator('.ex-card').filter({ hasText: 'Plank' });
     const bench = page.locator('.ex-card').filter({ hasText: 'Bench Press' });
 
-    await openExercise(page, 0); // Pullups
-    const pullupRows = pullups.locator('.set-row');
-    await expect(pullupRows).toHaveCount(3);
+    await openExercise(page, 0); // Plank
+    const plankRows = plank.locator('.set-row');
+    await expect(plankRows).toHaveCount(3);
 
-    // Each Pullups set row has exactly ONE input (reps) and no "×" separator.
+    // Each Plank set row has exactly ONE input (reps) and no "×" separator.
     for (let i = 0; i < 3; i++) {
-      const row = pullupRows.nth(i);
+      const row = plankRows.nth(i);
       await expect(row.locator('.set-num-input')).toHaveCount(1);
       await expect(row.locator('.set-x')).toHaveCount(0);
       // The single input is the reps input (numeric, placeholder "reps").
@@ -87,29 +87,29 @@ test.describe('Bodyweight exercises hide the weight input', () => {
     }
   });
 
-  test('logging a bodyweight set persists reps and keeps weight at 0 in localStorage', async ({ page }) => {
+  test('logging a weightless set persists reps and keeps weight at 0 in localStorage', async ({ page }) => {
     await startMixedSession(page);
-    await openExercise(page, 0); // Pullups
+    await openExercise(page, 0); // Plank
 
-    const firstRow = page.locator('.ex-card').filter({ hasText: 'Pullups' }).locator('.set-row').first();
+    const firstRow = page.locator('.ex-card').filter({ hasText: 'Plank' }).locator('.set-row').first();
     const repsInput = firstRow.locator('.set-num-input'); // single input
-    await repsInput.fill('8');
+    await repsInput.fill('45');
     await repsInput.press('Tab');
     await firstRow.locator('.set-done-btn').evaluate((el: HTMLElement) => el.click());
 
-    // active_session in localStorage should show reps=8 and weight=0 (default).
+    // active_session in localStorage should show reps=45 and weight=0 (default).
     const session = await page.evaluate(
       () => JSON.parse(localStorage.getItem('ws_active_session') ?? 'null'),
     );
     expect(session).not.toBeNull();
-    const pullupLog = session.exercise_logs.find((e: { exercise_name: string }) => e.exercise_name === 'Pullups');
-    expect(pullupLog).toBeTruthy();
-    expect(pullupLog.sets[0].reps).toBe(8);
-    expect(pullupLog.sets[0].weight).toBe(0);
-    expect(pullupLog.sets[0].completed).toBe(true);
+    const plankLog = session.exercise_logs.find((e: { exercise_name: string }) => e.exercise_name === 'Plank');
+    expect(plankLog).toBeTruthy();
+    expect(plankLog.sets[0].reps).toBe(45);
+    expect(plankLog.sets[0].weight).toBe(0);
+    expect(plankLog.sets[0].completed).toBe(true);
   });
 
-  test('freeform tab: adding a body-only library entry renders only a reps input', async ({ page }) => {
+  test('freeform tab: adding a weightless body-only library entry renders only a reps input', async ({ page }) => {
     await enableDateMock(page, MOCK_NOW);
     await freshPage(page);
     await page.locator('.nav-btn').filter({ hasText: 'Exercises' }).click();
@@ -117,20 +117,17 @@ test.describe('Bodyweight exercises hide the weight input', () => {
 
     await page.locator('.new-exercise-btn').click();
     await page.waitForSelector('.new-exercise-search');
-    // Type "pullups" to find the body-only Pullups library entry.
-    await page.locator('.new-exercise-search').fill('pullups');
+    // Plank is on the body-only list and NOT on WEIGHTABLE_BODYWEIGHT_IDS, so
+    // it should hide the weight input.
+    await page.locator('.new-exercise-search').fill('plank');
     await page.waitForSelector('.new-exercise-result');
-    // The .new-exercise-result text content includes the meta line (muscle · equipment),
-    // so filter by the inner .library-item-name with an exact text match to pick the
-    // body-only "Pullups" entry (not "V-Bar Pullup").
     await page
       .locator('.new-exercise-result')
-      .filter({ has: page.getByText('Pullups', { exact: true }) })
+      .filter({ has: page.getByText('Plank', { exact: true }) })
       .first()
       .click();
 
-    // Card is open by default after add; check its set rows.
-    const card = page.locator('.ex-card').filter({ hasText: 'Pullups' });
+    const card = page.locator('.ex-card').filter({ hasText: 'Plank' });
     await expect(card.locator('.exercise-body')).toHaveClass(/open/);
 
     const rows = card.locator('.set-row');
@@ -148,17 +145,17 @@ test.describe('Bodyweight exercises hide the weight input', () => {
       id: 'old-1',
       date: TODAY,
       created_at: `${TODAY}T10:00:00.000Z`,
-      exercise_name: 'Pullups',
-      exercise_id: 'Pullups',
+      exercise_name: 'Plank',
+      exercise_id: 'Plank',
       session_id: null,
       day_id: null,
       day_name: null,
       target_sets: 3,
-      reps_min: 5,
-      reps_max: 10,
+      reps_min: 30,
+      reps_max: 60,
       sets: [
-        { set_number: 1, reps: 8, weight: 0, completed: true, completed_date: TODAY },
-        { set_number: 2, reps: 7, weight: 0, completed: true, completed_date: TODAY },
+        { set_number: 1, reps: 45, weight: 0, completed: true, completed_date: TODAY },
+        { set_number: 2, reps: 40, weight: 0, completed: true, completed_date: TODAY },
       ],
       finalized: true,
     };
@@ -178,8 +175,97 @@ test.describe('Bodyweight exercises hide the weight input', () => {
     expect(after).toHaveLength(1);
     expect(after[0].id).toBe('old-1');
     expect(after[0].sets[0].weight).toBe(0);
-    expect(after[0].sets[0].reps).toBe(8);
+    expect(after[0].sets[0].reps).toBe(45);
     expect(after[0].sets[1].weight).toBe(0);
-    expect(after[0].sets[1].reps).toBe(7);
+    expect(after[0].sets[1].reps).toBe(40);
+  });
+});
+
+// ── Weightable bodyweight exceptions ─────────────────────────────────────────
+//
+// "Body only" exercises where adding weight is common (Decline Crunch with a
+// plate, weighted Pullups via belt, etc.) keep the weight × reps inputs.
+
+function weightableScheduled(date: string, libraryId: string, name: string) {
+  return {
+    id: `w-${libraryId}`,
+    date,
+    name: `Weighted ${name}`,
+    rationale: '',
+    source: 'Coach',
+    exercises: [
+      {
+        library_id: libraryId,
+        name,
+        target_sets: 3,
+        reps_min: 8,
+        reps_max: 12,
+        rest_seconds: 90,
+        notes: null,
+      },
+    ],
+    created_at: `${date}T08:00:00.000Z`,
+  };
+}
+
+async function startWeightableSession(
+  page: import('@playwright/test').Page,
+  libraryId: string,
+  name: string,
+) {
+  await enableDateMock(page, MOCK_NOW);
+  await freshPage(page);
+  await page.evaluate(
+    (val) => localStorage.setItem('ws_scheduled_workouts', val),
+    JSON.stringify([weightableScheduled(TODAY, libraryId, name)]),
+  );
+  await page.goto(BASE);
+  await page.waitForSelector('.bottom-nav');
+  await page.locator('button').filter({ hasText: 'Start workout' }).click();
+  await page.waitForSelector('.ex-card');
+  await openExercise(page, 0);
+}
+
+test.describe('Weightable body-only exercises keep the weight input', () => {
+  test('Decline Crunch shows weight × reps (it can be loaded with a plate)', async ({ page }) => {
+    await startWeightableSession(page, 'Decline_Crunch', 'Decline Crunch');
+    const firstRow = page.locator('.ex-card').filter({ hasText: 'Decline Crunch' }).locator('.set-row').first();
+    await expect(firstRow.locator('.set-num-input')).toHaveCount(2);
+    await expect(firstRow.locator('.set-x')).toHaveCount(1);
+    await expect(firstRow.locator('.set-num-input').first()).toHaveAttribute('placeholder', 'wt');
+    await expect(firstRow.locator('.set-num-input').last()).toHaveAttribute('placeholder', 'reps');
+  });
+
+  test('Pullups shows weight × reps (commonly loaded via dip belt)', async ({ page }) => {
+    await startWeightableSession(page, 'Pullups', 'Pullups');
+    const firstRow = page.locator('.ex-card').filter({ hasText: 'Pullups' }).locator('.set-row').first();
+    await expect(firstRow.locator('.set-num-input')).toHaveCount(2);
+    await expect(firstRow.locator('.set-x')).toHaveCount(1);
+  });
+
+  test('Dips - Triceps Version shows weight × reps', async ({ page }) => {
+    await startWeightableSession(page, 'Dips_-_Triceps_Version', 'Dips - Triceps Version');
+    const firstRow = page.locator('.ex-card').filter({ hasText: 'Dips - Triceps Version' }).locator('.set-row').first();
+    await expect(firstRow.locator('.set-num-input')).toHaveCount(2);
+    await expect(firstRow.locator('.set-x')).toHaveCount(1);
+  });
+
+  test('logging weighted Decline Crunch persists both weight and reps', async ({ page }) => {
+    await startWeightableSession(page, 'Decline_Crunch', 'Decline Crunch');
+    const firstRow = page.locator('.ex-card').filter({ hasText: 'Decline Crunch' }).locator('.set-row').first();
+    const inputs = firstRow.locator('.set-num-input');
+    await inputs.nth(0).fill('25');
+    await inputs.nth(0).press('Tab');
+    await inputs.nth(1).fill('10');
+    await inputs.nth(1).press('Tab');
+    await firstRow.locator('.set-done-btn').evaluate((el: HTMLElement) => el.click());
+
+    const session = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('ws_active_session') ?? 'null'),
+    );
+    const log = session.exercise_logs.find((e: { exercise_name: string }) => e.exercise_name === 'Decline Crunch');
+    expect(log.sets[0].weight).toBe(25);
+    expect(log.sets[0].reps).toBe(10);
+    expect(log.sets[0].completed).toBe(true);
   });
 });

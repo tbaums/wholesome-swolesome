@@ -407,6 +407,52 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    fn is_bodyweight_false_for_decline_crunch_on_allow_list() {
+        // Decline Crunch is body-only but commonly weighted with a plate.
+        // It's on WEIGHTABLE_BODYWEIGHT_IDS so the helper must NOT treat it as
+        // bodyweight (weight input should stay visible).
+        use crate::library::is_bodyweight_exercise;
+        let lib = vec![lib_entry_with_equipment(
+            "Decline_Crunch",
+            "Decline Crunch",
+            Some("body only"),
+        )];
+        assert!(!is_bodyweight_exercise("Decline_Crunch", "Decline Crunch", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_bodyweight_false_for_pullups_on_allow_list() {
+        // Pullups is body-only but commonly weighted with a dip belt.
+        use crate::library::is_bodyweight_exercise;
+        let lib = vec![lib_entry_with_equipment("Pullups", "Pullups", Some("body only"))];
+        assert!(!is_bodyweight_exercise("Pullups", "Pullups", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn is_bodyweight_true_for_plank_not_on_allow_list() {
+        // Plank is body-only and genuinely weightless — should still hide weight.
+        use crate::library::is_bodyweight_exercise;
+        let lib = vec![lib_entry_with_equipment("Plank", "Plank", Some("body only"))];
+        assert!(is_bodyweight_exercise("Plank", "Plank", &lib));
+    }
+
+    #[wasm_bindgen_test]
+    fn every_allow_list_id_resolves_to_false_when_present_in_library() {
+        // Regression guard: any id added to WEIGHTABLE_BODYWEIGHT_IDS MUST cause
+        // is_bodyweight_exercise to return false (i.e., keep weight input visible).
+        // If someone adds an id here but the equipment lookup is broken, we want
+        // a loud failure.
+        use crate::library::{is_bodyweight_exercise, WEIGHTABLE_BODYWEIGHT_IDS};
+        for id in WEIGHTABLE_BODYWEIGHT_IDS {
+            let lib = vec![lib_entry_with_equipment(id, id, Some("body only"))];
+            assert!(
+                !is_bodyweight_exercise(id, id, &lib),
+                "expected {id} to render with weight input (on allow-list) but is_bodyweight_exercise returned true"
+            );
+        }
+    }
+
+    #[wasm_bindgen_test]
     fn bodyweight_entry_with_non_zero_weight_round_trips_unchanged() {
         // Historical edge case: a user logged a weighted pull-up under the
         // plain "Pullups" name BEFORE we hid the weight input. The UI no
