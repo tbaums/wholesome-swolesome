@@ -77,7 +77,10 @@ fn apply_cardio_actuals_to_freeform(
         h, exercise_name, exercise_id,
         target_sets, reps_min, reps_max, selected_date,
     );
-    let total_minutes: u32 = actuals.zones.iter().map(|z| z.minutes).sum();
+    // Sum as f32 (Apple Health zone times are fractional). Round once at the
+    // end to seed set.reps (still u32 for the legacy cardio display path).
+    let total_minutes_f: f32 = actuals.zones.iter().map(|z| z.minutes).sum();
+    let total_minutes: u32 = total_minutes_f.round().max(0.0) as u32;
     let entry = &mut h[i];
     // Apply to the last set in the draft. If there are zero sets (shouldn't
     // happen because get_or_create_freeform always seeds target_sets ≥ 1),

@@ -560,7 +560,8 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                         let on_input = {
                             let ex_id = ex_id.clone();
                             move |e: leptos::ev::Event| {
-                                let val: u32 = event_target_value(&e).parse().unwrap_or(0);
+                                // Accept fractional minutes (Apple Health reports them).
+                                let val: f32 = event_target_value(&e).parse().unwrap_or(0.0);
                                 state.active_session.update(|opt| {
                                     if let Some(s) = opt.as_mut() {
                                         if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {

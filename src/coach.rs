@@ -392,13 +392,15 @@ pub fn cardio_minutes_in_window(
         }
         for s in &e.sets {
             if !s.completed { continue; }
-            // Zone-shaped cardio: sum per-zone actual minutes.
-            // Legacy: `reps` stores minutes directly.
+            // Zone-shaped cardio: sum per-zone actual minutes (f32, can be fractional
+            // since Apple Health samples HR continuously). Round per-set into the
+            // weekly u32 total so a string of decimals doesn't accumulate truncation
+            // bias.
             if let Some(zones) = &s.zone_minutes {
-                for z in zones {
-                    total = total.saturating_add(z.minutes);
-                }
+                let set_total: f32 = zones.iter().map(|z| z.minutes).sum();
+                total = total.saturating_add(set_total.round().max(0.0) as u32);
             } else {
+                // Legacy: `reps` stores minutes directly.
                 total = total.saturating_add(s.reps);
             }
         }
@@ -521,6 +523,12 @@ struct CardioActualsResponse {
 
 /// Parse a fenced-or-raw JSON blob into a CardioActuals. Used by the
 /// session view's "paste cardio summary" textarea.
+///
+/// Accepts both `{"cardio_actuals": {...}}` (preferred — what the prompt asks
+/// Claude to return) and the bare unwrapped object. When BOTH parses fail, we
+/// prefer the wrapped-form error if the input clearly contains `cardio_actuals`
+/// at the top level — otherwise the bare-form fallback's "missing field `zones`"
+/// hides the real issue (e.g. a field-type mismatch on a nested value).
 pub fn parse_cardio_actuals(json: &str) -> Result<CardioActuals, String> {
     let trimmed = json.trim();
     let body = if let Some(rest) = trimmed.strip_prefix("```json") {
@@ -530,11 +538,17 @@ pub fn parse_cardio_actuals(json: &str) -> Result<CardioActuals, String> {
     } else {
         trimmed.to_string()
     };
-    // Accept either a wrapped {"cardio_actuals": {...}} or the bare object.
-    if let Ok(wrapped) = serde_json::from_str::<CardioActualsResponse>(&body) {
-        return Ok(wrapped.cardio_actuals);
-    }
-    serde_json::from_str(&body).map_err(|e| format!("JSON parse: {e}"))
+    let wrapped_err = match serde_json::from_str::<CardioActualsResponse>(&body) {
+        Ok(wrapped) => return Ok(wrapped.cardio_actuals),
+        Err(e) => e,
+    };
+    let bare_err = match serde_json::from_str::<CardioActuals>(&body) {
+        Ok(actuals) => return Ok(actuals),
+        Err(e) => e,
+    };
+    let prefer_wrapped = body.contains("\"cardio_actuals\"");
+    let err = if prefer_wrapped { wrapped_err } else { bare_err };
+    Err(format!("JSON parse: {err}"))
 }
 
 /// Apply parsed vitals to the user's goals, dropping silently if the reading
