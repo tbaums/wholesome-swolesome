@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
 use crate::app::{AppState, View};
+use crate::coach::CardioActuals;
 use crate::models::{Exercise, ExerciseCategory, ExerciseEntry, LibraryExercise, SetLog};
 
 // ── Freeform upsert helper ────────────────────────────────────────────────────
@@ -50,6 +51,50 @@ fn get_or_create_freeform(
         target_duration_seconds: None,
     });
     h.len() - 1
+}
+
+/// Write `actuals` (per-zone minutes from an Apple Health screenshot, parsed
+/// by `crate::coach::parse_cardio_actuals`) into the freeform draft entry for
+/// (exercise_name, selected_date). Creates the draft via [`get_or_create_freeform`]
+/// if none exists. The last set is updated: `zone_minutes = Some(zones)`,
+/// `reps = sum(zone minutes)` (so the displayed total minutes reflects the
+/// import), `completed = true`, `completed_date = Some(selected_date)`. The
+/// set's `weight` (RPE) is left alone — the screenshot doesn't carry RPE.
+///
+/// Returns the total minutes that were written (sum across zones).
+#[allow(clippy::too_many_arguments)]
+fn apply_cardio_actuals_to_freeform(
+    h: &mut Vec<ExerciseEntry>,
+    exercise_name: &str,
+    exercise_id: &str,
+    target_sets: u32,
+    reps_min: u32,
+    reps_max: u32,
+    selected_date: &str,
+    actuals: &CardioActuals,
+) -> u32 {
+    let i = get_or_create_freeform(
+        h, exercise_name, exercise_id,
+        target_sets, reps_min, reps_max, selected_date,
+    );
+    let total_minutes: u32 = actuals.zones.iter().map(|z| z.minutes).sum();
+    let entry = &mut h[i];
+    // Apply to the last set in the draft. If there are zero sets (shouldn't
+    // happen because get_or_create_freeform always seeds target_sets ≥ 1),
+    // push one.
+    if entry.sets.is_empty() {
+        entry.sets.push(SetLog {
+            set_number: 1,
+            ..SetLog::default()
+        });
+    }
+    let last_idx = entry.sets.len() - 1;
+    let last = &mut entry.sets[last_idx];
+    last.reps = total_minutes;
+    last.zone_minutes = Some(actuals.zones.clone());
+    last.completed = true;
+    last.completed_date = Some(selected_date.to_string());
+    total_minutes
 }
 
 // ── Exercises view ────────────────────────────────────────────────────────────
@@ -530,8 +575,144 @@ fn ExerciseFreeformCard(
                         />
                         <button class="add-set-btn" on:click=add_set>"+ Add Set"</button>
                     </div>
+
+                    // Cardio-only: Apple Health screenshot → JSON → zone_minutes flow.
+                    // Mirrors the session.rs CardioActualsImport but scoped to this
+                    // freeform exercise (the prompt embeds the specific library_id and
+                    // the import writes to the draft entry for selected_date).
+                    {
+                        let is_cardio = is_cardio.clone();
+                        let exercise_name = exercise_name.clone();
+                        let exercise_id = exercise_id.clone();
+                        move || is_cardio().then(|| {
+                            view! {
+                                <FreeformCardioImportCard
+                                    exercise_name=exercise_name.clone()
+                                    exercise_id=exercise_id.clone()
+                                    target_sets=target_sets
+                                    reps_min=reps_min
+                                    reps_max=reps_max
+                                    selected_date=selected_date
+                                />
+                            }
+                        })
+                    }
                 </div>
             </div>
+        </div>
+    }
+}
+
+// ── Freeform cardio screenshot-import card ────────────────────────────────────
+//
+// Per-exercise sibling of session.rs::CardioActualsImport. Renders inside the
+// accordion body of an ad-hoc cardio exercise. Same prompt shape and parser as
+// the session version, so the off-app Claude conversation is interchangeable.
+
+#[component]
+fn FreeformCardioImportCard(
+    exercise_name: String,
+    exercise_id: String,
+    target_sets: u32,
+    reps_min: u32,
+    reps_max: u32,
+    selected_date: RwSignal<String>,
+) -> impl IntoView {
+    let state = expect_context::<AppState>();
+    let response_text: RwSignal<String> = RwSignal::new(String::new());
+    let status: RwSignal<Option<String>> = RwSignal::new(None);
+
+    let prompt_text = {
+        let exercise_name = exercise_name.clone();
+        let exercise_id = exercise_id.clone();
+        move || -> String {
+            // exercise_id should always be a real library id for cardio (added via
+            // picker), but if for any reason it isn't, fall back to the name.
+            let id_token = if exercise_id.is_empty() {
+                exercise_name.as_str()
+            } else {
+                exercise_id.as_str()
+            };
+            format!(
+                "Here's my Apple Health workout-summary screenshot. Return the per-zone heart-rate minutes \
+                 from it as a single fenced ```json code block, nothing else:\n\
+                 \n\
+                 ```json\n\
+                 {{\"cardio_actuals\":{{\"exercise_id\":\"{id_token}\",\"zones\":[{{\"zone\":1,\"minutes\":<N>}},{{\"zone\":2,\"minutes\":<N>}},{{\"zone\":3,\"minutes\":<N>}},{{\"zone\":4,\"minutes\":<N>}},{{\"zone\":5,\"minutes\":<N>}}]}}}}\n\
+                 ```\n\
+                 \n\
+                 Use Apple's zone numbering 1–5. Omit any zone with 0 minutes. The exercise is \"{exercise_name}\"; use that exact library_id."
+            )
+        }
+    };
+
+    let copy_prompt = {
+        let prompt_text = prompt_text.clone();
+        move |_| {
+            let text = prompt_text();
+            if let Some(window) = web_sys::window() {
+                let _ = window.navigator().clipboard().write_text(&text);
+                state.show_toast("Prompt copied — paste into Claude with your screenshot");
+            }
+        }
+    };
+
+    let import = {
+        let exercise_name = exercise_name.clone();
+        let exercise_id = exercise_id.clone();
+        move |_| {
+            let text = response_text.get_untracked();
+            if text.trim().is_empty() {
+                status.set(Some("Paste Claude's JSON response first.".into()));
+                return;
+            }
+            match crate::coach::parse_cardio_actuals(&text) {
+                Ok(actuals) => {
+                    let active_date = selected_date.get_untracked();
+                    let mut total: u32 = 0;
+                    state.history.update(|h| {
+                        total = apply_cardio_actuals_to_freeform(
+                            h, &exercise_name, &exercise_id,
+                            target_sets, reps_min, reps_max,
+                            &active_date, &actuals,
+                        );
+                    });
+                    status.set(Some(format!(
+                        "✓ {} min imported across {} zone(s)",
+                        total,
+                        actuals.zones.len(),
+                    )));
+                    response_text.set(String::new());
+                    state.show_toast("Cardio zones imported");
+                }
+                Err(e) => status.set(Some(format!("✗ {e}"))),
+            }
+        }
+    };
+
+    view! {
+        <div class="cardio-import-card" style="margin-top:10px">
+            <div class="ci-title">"Paste Apple Health cardio summary"</div>
+            <div class="ci-blurb">
+                "1. Copy the prompt. 2. Paste it into a Claude conversation with your Apple Health workout-summary screenshot. 3. Paste Claude's JSON response below."
+            </div>
+            <div class="ci-prompt-wrap">
+                <pre class="ci-prompt">{prompt_text}</pre>
+                <button class="ci-copy-btn" on:click=copy_prompt aria-label="Copy prompt">"📋 Copy"</button>
+            </div>
+            <textarea
+                placeholder="{ &quot;cardio_actuals&quot;: { ... } }"
+                prop:value=move || response_text.get()
+                on:input=move |e| response_text.set(event_target_value(&e))
+            />
+            {move || status.get().map(|s| view! {
+                <div class="text-sm" style="margin-top:6px">{s}</div>
+            })}
+            <button
+                class="btn btn-primary btn-full"
+                style="margin-top:8px"
+                on:click=import
+            >"Import zone minutes"</button>
         </div>
     }
 }

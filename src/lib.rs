@@ -1296,4 +1296,48 @@ mod tests {
         assert_eq!(zones[0].zone, 2);
         assert_eq!(zones[0].minutes, 30);
     }
+
+    // ── Cardio-actuals parser (drives both the session and freeform import) ───
+
+    #[wasm_bindgen_test]
+    fn cardio_actuals_wrapped_form_parses() {
+        use crate::coach::parse_cardio_actuals;
+        let json = r#"{"cardio_actuals":{"exercise_id":"Elliptical_Trainer","zones":[
+            {"zone":1,"minutes":5},
+            {"zone":2,"minutes":18},
+            {"zone":3,"minutes":9}
+        ]}}"#;
+        let parsed = parse_cardio_actuals(json).expect("wrapped form should parse");
+        assert_eq!(parsed.exercise_id.as_deref(), Some("Elliptical_Trainer"));
+        assert_eq!(parsed.zones.len(), 3);
+        let total: u32 = parsed.zones.iter().map(|z| z.minutes).sum();
+        assert_eq!(total, 32);
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_actuals_bare_form_parses() {
+        // For convenience the parser also accepts the unwrapped object directly.
+        use crate::coach::parse_cardio_actuals;
+        let json = r#"{"exercise_id":"Elliptical_Trainer","zones":[{"zone":2,"minutes":20}]}"#;
+        let parsed = parse_cardio_actuals(json).expect("bare form should parse");
+        assert_eq!(parsed.zones.len(), 1);
+        assert_eq!(parsed.zones[0].zone, 2);
+        assert_eq!(parsed.zones[0].minutes, 20);
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_actuals_fenced_json_block_parses() {
+        // Claude wraps the response in ```json … ``` — strip the fence.
+        use crate::coach::parse_cardio_actuals;
+        let json = "```json\n{\"cardio_actuals\":{\"exercise_id\":\"Elliptical_Trainer\",\"zones\":[{\"zone\":3,\"minutes\":15}]}}\n```";
+        let parsed = parse_cardio_actuals(json).expect("fenced form should parse");
+        assert_eq!(parsed.zones[0].minutes, 15);
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_actuals_malformed_returns_err() {
+        use crate::coach::parse_cardio_actuals;
+        let err = parse_cardio_actuals("not actually json {").expect_err("must reject malformed input");
+        assert!(err.to_lowercase().contains("json"), "error should mention JSON parsing: {err}");
+    }
 }
