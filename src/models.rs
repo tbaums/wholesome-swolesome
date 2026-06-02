@@ -184,10 +184,15 @@ pub enum WorkoutSource {
 /// Apple-Health-style HR zone budget. Used both as a coach prescription
 /// (`target_zones`) and as a per-set actual (`zone_minutes`). Zone 1-5 maps
 /// to the standard Apple Watch HR zones; we don't try to redefine them.
+///
+/// `minutes` is `f32`, not `u32`, because Apple Health samples HR continuously
+/// and reports fractional zone time (e.g. `17.85` min in Z2). Legacy JSON
+/// with integer values like `"minutes": 30` still deserializes — serde reads
+/// integers into floats without complaint.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ZoneTarget {
     pub zone: u8,
-    pub minutes: u32,
+    pub minutes: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -1235,8 +1235,8 @@ mod tests {
                 duration_seconds: None,
                 // Per-zone actuals sum to 13 + 16 = 29.
                 zone_minutes: Some(vec![
-                    ZoneTarget { zone: 1, minutes: 13 },
-                    ZoneTarget { zone: 4, minutes: 16 },
+                    ZoneTarget { zone: 1, minutes: 13.0 },
+                    ZoneTarget { zone: 4, minutes: 16.0 },
                 ]),
             }],
             finalized: true,
@@ -1255,9 +1255,9 @@ mod tests {
         assert_eq!(parsed.exercise_id.as_deref(), Some("Running_Treadmill"));
         assert_eq!(parsed.zones.len(), 2);
         assert_eq!(parsed.zones[0].zone, 1);
-        assert_eq!(parsed.zones[0].minutes, 5);
+        assert_eq!(parsed.zones[0].minutes, 5.0);
         assert_eq!(parsed.zones[1].zone, 4);
-        assert_eq!(parsed.zones[1].minutes, 20);
+        assert_eq!(parsed.zones[1].minutes, 20.0);
     }
 
     #[wasm_bindgen_test]
@@ -1294,7 +1294,7 @@ mod tests {
         let zones = parsed.workout.exercises[0].target_zones.as_ref().expect("target_zones present");
         assert_eq!(zones.len(), 1);
         assert_eq!(zones[0].zone, 2);
-        assert_eq!(zones[0].minutes, 30);
+        assert_eq!(zones[0].minutes, 30.0);
     }
 
     // ── Cardio-actuals parser (drives both the session and freeform import) ───
@@ -1310,8 +1310,8 @@ mod tests {
         let parsed = parse_cardio_actuals(json).expect("wrapped form should parse");
         assert_eq!(parsed.exercise_id.as_deref(), Some("Elliptical_Trainer"));
         assert_eq!(parsed.zones.len(), 3);
-        let total: u32 = parsed.zones.iter().map(|z| z.minutes).sum();
-        assert_eq!(total, 32);
+        let total: f32 = parsed.zones.iter().map(|z| z.minutes).sum();
+        assert_eq!(total, 32.0);
     }
 
     #[wasm_bindgen_test]
@@ -1322,7 +1322,7 @@ mod tests {
         let parsed = parse_cardio_actuals(json).expect("bare form should parse");
         assert_eq!(parsed.zones.len(), 1);
         assert_eq!(parsed.zones[0].zone, 2);
-        assert_eq!(parsed.zones[0].minutes, 20);
+        assert_eq!(parsed.zones[0].minutes, 20.0);
     }
 
     #[wasm_bindgen_test]
@@ -1331,7 +1331,7 @@ mod tests {
         use crate::coach::parse_cardio_actuals;
         let json = "```json\n{\"cardio_actuals\":{\"exercise_id\":\"Elliptical_Trainer\",\"zones\":[{\"zone\":3,\"minutes\":15}]}}\n```";
         let parsed = parse_cardio_actuals(json).expect("fenced form should parse");
-        assert_eq!(parsed.zones[0].minutes, 15);
+        assert_eq!(parsed.zones[0].minutes, 15.0);
     }
 
     #[wasm_bindgen_test]
@@ -1339,5 +1339,92 @@ mod tests {
         use crate::coach::parse_cardio_actuals;
         let err = parse_cardio_actuals("not actually json {").expect_err("must reject malformed input");
         assert!(err.to_lowercase().contains("json"), "error should mention JSON parsing: {err}");
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_actuals_accepts_fractional_minutes() {
+        // Regression: Apple Health reports fractional zone minutes (2.45,
+        // 17.85, …). ZoneTarget.minutes was originally u32, which caused
+        // serde to fail the wrapped-form parse and then fall back to the
+        // bare-form parse, surfacing a misleading "missing field `zones`"
+        // error. This is the user's exact payload from that bug report.
+        use crate::coach::parse_cardio_actuals;
+        let user_payload = r#"{"cardio_actuals":{"exercise_id":"Elliptical_Trainer","zones":[{"zone":1,"minutes":2.45},{"zone":2,"minutes":17.85},{"zone":3,"minutes":2.65},{"zone":4,"minutes":15.6},{"zone":5,"minutes":1.07}]}}"#;
+        let parsed = parse_cardio_actuals(user_payload).expect("fractional minutes must parse");
+        assert_eq!(parsed.zones.len(), 5);
+        assert_eq!(parsed.zones[0].minutes, 2.45);
+        assert_eq!(parsed.zones[3].minutes, 15.6);
+        let total: f32 = parsed.zones.iter().map(|z| z.minutes).sum();
+        // 2.45 + 17.85 + 2.65 + 15.6 + 1.07 = 39.62
+        assert!((total - 39.62).abs() < 1e-3, "sum was {total}, expected 39.62");
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_actuals_legacy_integer_minutes_still_parse() {
+        // Back-compat: stored state.json files written before the f32 change
+        // contain integer literals like `"minutes": 30`. Serde must read those
+        // into f32 without complaint.
+        use crate::coach::parse_cardio_actuals;
+        let legacy = r#"{"cardio_actuals":{"exercise_id":"X","zones":[{"zone":2,"minutes":30}]}}"#;
+        let parsed = parse_cardio_actuals(legacy).expect("legacy integer minutes must still parse");
+        assert_eq!(parsed.zones[0].minutes, 30.0);
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_actuals_error_for_wrapped_form_reports_underlying_problem() {
+        // When the body clearly has "cardio_actuals" at top level but the
+        // wrapped parse fails on a nested field, surface the wrapped error
+        // (not the misleading "missing field zones" bare-form fallback).
+        use crate::coach::parse_cardio_actuals;
+        // Bad nested zone (string where number is expected) — wrapped parse
+        // should fail with a clear "invalid type" message.
+        let bad = r#"{"cardio_actuals":{"exercise_id":"X","zones":[{"zone":"two","minutes":15.0}]}}"#;
+        let err = parse_cardio_actuals(bad).expect_err("must reject bad nested type");
+        let lc = err.to_lowercase();
+        // The error should clearly point at the actual problem (the inner
+        // type mismatch), not a misleading "missing field `zones`".
+        assert!(
+            lc.contains("invalid") || lc.contains("expected") || lc.contains("zone"),
+            "error should hint at the real cause, got: {err}"
+        );
+        assert!(
+            !lc.contains("missing field `zones`"),
+            "wrapped-form error must not be hidden by bare-form fallback: {err}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_minutes_in_window_sums_fractional_zones_and_rounds() {
+        // The weekly cardio total is u32 (display-only). When zone_minutes are
+        // fractional, we should sum within the set as f32 and round once.
+        use crate::coach::cardio_minutes_in_window;
+        use crate::models::ZoneTarget;
+        let lib = vec![lib_entry_with_cat("Elliptical_Trainer", "Elliptical Trainer", "cardio")];
+        let entry = ExerciseEntry {
+            id: "e1".into(),
+            date: "2026-06-02".into(),
+            exercise_name: "Elliptical Trainer".into(),
+            exercise_id: "Elliptical_Trainer".into(),
+            session_id: None, day_id: None, day_name: None,
+            target_sets: 1, reps_min: 30, reps_max: 30,
+            sets: vec![crate::models::SetLog {
+                set_number: 1, reps: 0, weight: 0.0,
+                completed: true, completed_date: None,
+                duration_seconds: None,
+                // Same payload as the user's bug report. Sum = 39.62 → rounds to 40.
+                zone_minutes: Some(vec![
+                    ZoneTarget { zone: 1, minutes: 2.45 },
+                    ZoneTarget { zone: 2, minutes: 17.85 },
+                    ZoneTarget { zone: 3, minutes: 2.65 },
+                    ZoneTarget { zone: 4, minutes: 15.6 },
+                    ZoneTarget { zone: 5, minutes: 1.07 },
+                ]),
+            }],
+            finalized: true,
+            created_at: "2026-06-02T10:00:00.000Z".into(),
+            target_duration_seconds: None,
+        };
+        let total = cardio_minutes_in_window(&[entry], &lib, "2026-06-02", 7);
+        assert_eq!(total, 40, "39.62 should round to 40");
     }
 }
