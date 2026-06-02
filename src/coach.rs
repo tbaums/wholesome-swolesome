@@ -162,6 +162,30 @@ pub fn build_coach_packet(input: PacketInput<'_>) -> String {
                     .map(|s| {
                         if let Some(dur) = s.duration_seconds {
                             format!("{}s", dur)
+                        } else if let Some(zones) = &s.zone_minutes {
+                            // Cardio with per-zone breakdown — surface the
+                            // distribution so the coach can read intensity
+                            // shape, not just total minutes. RPE included
+                            // when set (typically from the Apple Health
+                            // import flow).
+                            let zone_str = zones
+                                .iter()
+                                .map(|z| {
+                                    if z.minutes.fract() == 0.0 {
+                                        format!("Z{}:{:.0}", z.zone, z.minutes)
+                                    } else {
+                                        format!("Z{}:{:.1}", z.zone, z.minutes)
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            let total: f32 = zones.iter().map(|z| z.minutes).sum();
+                            let rpe_suffix = if s.weight > 0.0 {
+                                format!(" @ RPE {:.0}", s.weight)
+                            } else {
+                                String::new()
+                            };
+                            format!("{} ({:.0} min total){}", zone_str, total.round(), rpe_suffix)
                         } else if s.weight > 0.0 {
                             format!("{}x{:.0}", s.reps, s.weight)
                         } else {
@@ -514,6 +538,12 @@ pub struct CardioActuals {
     #[serde(default)]
     pub exercise_name: Option<String>,
     pub zones: Vec<crate::models::ZoneTarget>,
+    /// Subjective RPE 1-10 that Claude infers from the zone distribution
+    /// (mostly-Z2 → 5-6, mostly-Z4 → 8, mostly-Z5 → 9-10). Apple Health
+    /// doesn't carry an RPE itself; this is the model's best guess based on
+    /// the same screenshot. Optional for back-compat with old responses.
+    #[serde(default)]
+    pub estimated_rpe: Option<f32>,
 }
 
 #[derive(serde::Deserialize)]

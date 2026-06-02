@@ -179,4 +179,72 @@ test.describe('Freeform cardio: Apple Health zone-import flow', () => {
     );
     expect(entries).toHaveLength(0);
   });
+
+  test('prompt now asks Claude for an estimated_rpe', async ({ page }) => {
+    await addCardioExercise(page, 'elliptical', 'Elliptical Trainer');
+    const promptText = await page
+      .locator('.ex-card')
+      .filter({ hasText: 'Elliptical Trainer' })
+      .locator('.cardio-import-card .ci-prompt')
+      .textContent();
+    // The fix added the estimated_rpe field to both the example JSON and
+    // the inference guidance line.
+    expect(promptText).toContain('estimated_rpe');
+    expect(promptText).toMatch(/RPE/);
+  });
+
+  test('a response with estimated_rpe writes it to set.weight', async ({ page }) => {
+    await addCardioExercise(page, 'elliptical', 'Elliptical Trainer');
+    const importCard = page
+      .locator('.ex-card')
+      .filter({ hasText: 'Elliptical Trainer' })
+      .locator('.cardio-import-card');
+
+    const response = JSON.stringify({
+      cardio_actuals: {
+        exercise_id: 'Elliptical_Trainer',
+        zones: [
+          { zone: 2, minutes: 17.85 },
+          { zone: 4, minutes: 15.6 },
+        ],
+        estimated_rpe: 7,
+      },
+    });
+    await importCard.locator('textarea').fill(response);
+    await importCard.locator('button').filter({ hasText: 'Import zone minutes' }).click();
+
+    const entries = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('ws_ex_history') ?? '[]'),
+    );
+    expect(entries).toHaveLength(1);
+    const last = entries[0].sets[entries[0].sets.length - 1];
+    expect(last.weight).toBe(7);
+    expect(last.zone_minutes.length).toBe(2);
+  });
+
+  test('a response WITHOUT estimated_rpe leaves set.weight untouched (back-compat)', async ({ page }) => {
+    await addCardioExercise(page, 'elliptical', 'Elliptical Trainer');
+    const importCard = page
+      .locator('.ex-card')
+      .filter({ hasText: 'Elliptical Trainer' })
+      .locator('.cardio-import-card');
+
+    const response = JSON.stringify({
+      cardio_actuals: {
+        exercise_id: 'Elliptical_Trainer',
+        zones: [{ zone: 2, minutes: 20.0 }],
+      },
+    });
+    await importCard.locator('textarea').fill(response);
+    await importCard.locator('button').filter({ hasText: 'Import zone minutes' }).click();
+
+    const entries = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('ws_ex_history') ?? '[]'),
+    );
+    const last = entries[0].sets[entries[0].sets.length - 1];
+    // Default weight (RPE) is 0 — confirming the import did NOT clobber it
+    // with a synthetic value when the response omitted estimated_rpe.
+    expect(last.weight).toBe(0);
+    expect(last.zone_minutes[0].minutes).toBe(20);
+  });
 });
