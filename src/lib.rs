@@ -1394,6 +1394,87 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    fn cardio_actuals_accepts_estimated_rpe() {
+        // The post-fix prompt asks Claude to infer an RPE from the zone
+        // distribution and include it as `estimated_rpe`. Parser surfaces
+        // it as Option<f32> so the importer can write it to set.weight.
+        use crate::coach::parse_cardio_actuals;
+        let input = r#"{"cardio_actuals":{"exercise_id":"Elliptical_Trainer","zones":[
+            {"zone":2,"minutes":17.85},{"zone":4,"minutes":15.6}
+        ],"estimated_rpe":7}}"#;
+        let parsed = parse_cardio_actuals(input).expect("should parse with RPE");
+        assert_eq!(parsed.estimated_rpe, Some(7.0));
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_actuals_estimated_rpe_is_optional_for_back_compat() {
+        // Responses generated before this change (or from a Claude conversation
+        // that ignored the new field) must still parse cleanly with rpe = None.
+        use crate::coach::parse_cardio_actuals;
+        let input = r#"{"cardio_actuals":{"exercise_id":"X","zones":[{"zone":2,"minutes":20.0}]}}"#;
+        let parsed = parse_cardio_actuals(input).expect("should parse without RPE");
+        assert!(parsed.estimated_rpe.is_none(), "missing field should yield None");
+    }
+
+    #[wasm_bindgen_test]
+    fn cardio_actuals_accepts_fractional_rpe() {
+        // Claude may return RPE as a float (e.g. 7.5). Accept it.
+        use crate::coach::parse_cardio_actuals;
+        let input = r#"{"cardio_actuals":{"exercise_id":"X","zones":[{"zone":2,"minutes":20.0}],"estimated_rpe":7.5}}"#;
+        let parsed = parse_cardio_actuals(input).expect("should accept fractional RPE");
+        assert_eq!(parsed.estimated_rpe, Some(7.5));
+    }
+
+    #[wasm_bindgen_test]
+    fn coach_packet_surfaces_zone_breakdown_in_recent_training() {
+        // When a freeform cardio set carries zone_minutes (typically from the
+        // Apple Health import), the coach packet's Recent training summary
+        // must show the per-zone breakdown so the next coach run can read
+        // intensity shape, not just total minutes.
+        use crate::coach::{build_coach_packet, PacketInput};
+        use crate::models::ZoneTarget;
+        let lib = vec![lib_entry_with_cat("Elliptical_Trainer", "Elliptical Trainer", "cardio")];
+        let entry = ExerciseEntry {
+            id: "e1".into(),
+            date: "2026-06-01".into(),
+            created_at: "2026-06-01T10:00:00.000Z".into(),
+            exercise_name: "Elliptical Trainer".into(),
+            exercise_id: "Elliptical_Trainer".into(),
+            session_id: None, day_id: None, day_name: None,
+            target_sets: 1, reps_min: 30, reps_max: 30,
+            sets: vec![crate::models::SetLog {
+                set_number: 1, reps: 40,
+                weight: 7.0, // RPE from the Claude-inferred import
+                completed: true,
+                completed_date: Some("2026-06-01".into()),
+                duration_seconds: None,
+                zone_minutes: Some(vec![
+                    ZoneTarget { zone: 1, minutes: 2.45 },
+                    ZoneTarget { zone: 2, minutes: 17.85 },
+                    ZoneTarget { zone: 4, minutes: 15.6 },
+                ]),
+            }],
+            finalized: true,
+            target_duration_seconds: None,
+        };
+        let packet = build_coach_packet(PacketInput {
+            goals: &UserGoals::default(),
+            history: &[entry],
+            library: &lib,
+            scheduled: &[],
+            today: "2026-06-02",
+            target_date: "2026-06-03",
+        });
+        // Per-zone breakdown should appear in the recent-training section.
+        assert!(packet.contains("Z1:2.5"), "should show Z1 with fractional minutes: {packet}");
+        assert!(packet.contains("Z2:17.9"), "should show Z2 with fractional minutes: {packet}");
+        assert!(packet.contains("Z4:15.6"), "should show Z4 with fractional minutes: {packet}");
+        // Total minutes and RPE annotation should be present (35.9 → 36).
+        assert!(packet.contains("36 min total"), "total rounded minutes should appear: {packet}");
+        assert!(packet.contains("RPE 7"), "RPE should appear when set.weight > 0: {packet}");
+    }
+
+    #[wasm_bindgen_test]
     fn cardio_minutes_in_window_sums_fractional_zones_and_rounds() {
         // The weekly cardio total is u32 (display-only). When zone_minutes are
         // fractional, we should sum within the set as f32 and round once.

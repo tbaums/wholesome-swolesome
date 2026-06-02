@@ -756,13 +756,15 @@ fn CardioActualsImport() -> impl IntoView {
         };
         format!(
             "Here's my Apple Health workout-summary screenshot. Return the per-zone heart-rate minutes \
-             from it as a single fenced ```json code block, nothing else:\n\
+             plus an inferred RPE as a single fenced ```json code block, nothing else:\n\
              \n\
              ```json\n\
-             {{\"cardio_actuals\":{{\"exercise_id\":\"{id_token}\",\"zones\":[{{\"zone\":1,\"minutes\":<N>}},{{\"zone\":2,\"minutes\":<N>}},{{\"zone\":3,\"minutes\":<N>}},{{\"zone\":4,\"minutes\":<N>}},{{\"zone\":5,\"minutes\":<N>}}]}}}}\n\
+             {{\"cardio_actuals\":{{\"exercise_id\":\"{id_token}\",\"zones\":[{{\"zone\":1,\"minutes\":<N>}},{{\"zone\":2,\"minutes\":<N>}},{{\"zone\":3,\"minutes\":<N>}},{{\"zone\":4,\"minutes\":<N>}},{{\"zone\":5,\"minutes\":<N>}}],\"estimated_rpe\":<1-10>}}}}\n\
              ```\n\
              \n\
-             Use Apple's zone numbering 1–5. Omit any zone with 0 minutes.{name_hint}"
+             Use Apple's zone numbering 1–5. Omit any zone with 0 minutes. For `estimated_rpe`, \
+             infer a 1–10 score from the zone distribution: mostly Z1/Z2 → 4–6; mostly Z3 → 6–7; \
+             mostly Z4 → 7–8; significant Z5 → 9–10.{name_hint}"
         )
     };
 
@@ -799,6 +801,12 @@ fn CardioActualsImport() -> impl IntoView {
                     if log.target_zones.is_none() { return; }
                     if let Some(set) = log.sets.last_mut() {
                         set.zone_minutes = Some(actuals.zones.clone());
+                        // RPE is optional — only overwrite if Claude provided one.
+                        // (Apple Health doesn't carry RPE; this is Claude's inference
+                        // from the zone distribution.)
+                        if let Some(rpe) = actuals.estimated_rpe {
+                            set.weight = rpe;
+                        }
                     }
                     applied_to = Some(log.exercise_name.clone());
                 });

@@ -95,6 +95,11 @@ fn apply_cardio_actuals_to_freeform(
     let last = &mut entry.sets[last_idx];
     last.reps = total_minutes;
     last.zone_minutes = Some(actuals.zones.clone());
+    // RPE is optional — only overwrite weight (which stores RPE for cardio) if
+    // Claude inferred one. Otherwise leave whatever the user typed manually.
+    if let Some(rpe) = actuals.estimated_rpe {
+        last.weight = rpe;
+    }
     last.completed = true;
     last.completed_date = Some(selected_date.to_string());
     total_minutes
@@ -638,13 +643,15 @@ fn FreeformCardioImportCard(
             };
             format!(
                 "Here's my Apple Health workout-summary screenshot. Return the per-zone heart-rate minutes \
-                 from it as a single fenced ```json code block, nothing else:\n\
+                 plus an inferred RPE as a single fenced ```json code block, nothing else:\n\
                  \n\
                  ```json\n\
-                 {{\"cardio_actuals\":{{\"exercise_id\":\"{id_token}\",\"zones\":[{{\"zone\":1,\"minutes\":<N>}},{{\"zone\":2,\"minutes\":<N>}},{{\"zone\":3,\"minutes\":<N>}},{{\"zone\":4,\"minutes\":<N>}},{{\"zone\":5,\"minutes\":<N>}}]}}}}\n\
+                 {{\"cardio_actuals\":{{\"exercise_id\":\"{id_token}\",\"zones\":[{{\"zone\":1,\"minutes\":<N>}},{{\"zone\":2,\"minutes\":<N>}},{{\"zone\":3,\"minutes\":<N>}},{{\"zone\":4,\"minutes\":<N>}},{{\"zone\":5,\"minutes\":<N>}}],\"estimated_rpe\":<1-10>}}}}\n\
                  ```\n\
                  \n\
-                 Use Apple's zone numbering 1–5. Omit any zone with 0 minutes. The exercise is \"{exercise_name}\"; use that exact library_id."
+                 Use Apple's zone numbering 1–5. Omit any zone with 0 minutes. For `estimated_rpe`, \
+                 infer a 1–10 score from the zone distribution: mostly Z1/Z2 → 4–6; mostly Z3 → 6–7; \
+                 mostly Z4 → 7–8; significant Z5 → 9–10. The exercise is \"{exercise_name}\"; use that exact library_id."
             )
         }
     };
