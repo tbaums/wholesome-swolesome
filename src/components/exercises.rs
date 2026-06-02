@@ -161,10 +161,49 @@ pub fn ExercisesView() -> impl IntoView {
         show_picker.set(false);
     };
 
+    // Date to log for — defaults to today, user can backdate if they forgot to
+    // log yesterday's session in the moment. Drives both the entry's `date`
+    // field and each set's `completed_date`. Capped at today (no future dates).
+    let selected_date: RwSignal<String> = RwSignal::new(crate::app::current_date());
+    let today_str = crate::app::current_date();
+
     view! {
         <div class="page">
             <div class="page-header">
                 <h1 class="page-title">"Exercises"</h1>
+            </div>
+
+            <div class="card" style="margin-bottom:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+                <label class="text-sm text-muted" style="flex-shrink:0">"Logging for"</label>
+                <input
+                    type="date"
+                    class="input"
+                    style="flex:1; min-width:140px; max-width:200px"
+                    max=today_str.clone()
+                    prop:value=move || selected_date.get()
+                    on:change=move |e| {
+                        let v = event_target_value(&e);
+                        // Empty value (user cleared the field) falls back to today.
+                        if v.trim().is_empty() {
+                            selected_date.set(crate::app::current_date());
+                        } else {
+                            selected_date.set(v);
+                        }
+                    }
+                />
+                {
+                    let today_str = today_str.clone();
+                    move || if selected_date.get() != today_str {
+                        view! {
+                            <span
+                                class="text-sm"
+                                style="color:var(--accent); font-weight:600"
+                            >"⏱ Backdated"</span>
+                        }.into_any()
+                    } else {
+                        ().into_any()
+                    }
+                }
             </div>
 
             {move || if show_picker.get() {
@@ -258,7 +297,7 @@ pub fn ExercisesView() -> impl IntoView {
                 each=move || exercise_names.get()
                 key=|name| name.clone()
                 children=move |exercise_name| {
-                    view! { <ExerciseFreeformCard exercise_name=exercise_name open_ex=open_ex/> }
+                    view! { <ExerciseFreeformCard exercise_name=exercise_name open_ex=open_ex selected_date=selected_date/> }
                 }
             />
         </div>
@@ -280,6 +319,9 @@ fn defaults_for_category(category: &str) -> (u32, u32, u32) {
 fn ExerciseFreeformCard(
     exercise_name: String,
     open_ex: RwSignal<Option<String>>,
+    /// Date to log this exercise for. Default is today, but the user can backdate
+    /// from the picker at the top of the Exercises page.
+    selected_date: RwSignal<String>,
 ) -> impl IntoView {
     let state = expect_context::<AppState>();
 
@@ -345,16 +387,17 @@ fn ExerciseFreeformCard(
         }
     };
 
-    // set_indices is reactive: grows when the user adds a set.
+    // set_indices is reactive: grows when the user adds a set OR when the
+    // user changes selected_date (a different date's draft has different sets).
     // Skips finalized entries — those are closed history records, not the active session.
     let set_indices = {
         let exercise_name = exercise_name.clone();
         move || {
-            let today = crate::app::current_date();
+            let active_date = selected_date.get();
             state.history
                 .get()
                 .iter()
-                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized)
+                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == active_date && !e.finalized)
                 .map(|e| (0..e.sets.len()).collect::<Vec<_>>())
                 .unwrap_or_else(|| (0..target_sets as usize).collect())
         }
@@ -364,11 +407,11 @@ fn ExerciseFreeformCard(
         let exercise_name = exercise_name.clone();
         let exercise_id = exercise_id.clone();
         move |_| {
-            let today = crate::app::current_date();
+            let active_date = selected_date.get_untracked();
             state.history.update(|h| {
                 let i = get_or_create_freeform(
                     h, &exercise_name, &exercise_id,
-                    target_sets, reps_min, reps_max, &today,
+                    target_sets, reps_min, reps_max, &active_date,
                 );
                 let last = h[i].sets.last().cloned().unwrap_or_default();
                 let n = h[i].sets.len() as u32 + 1;
@@ -393,14 +436,16 @@ fn ExerciseFreeformCard(
         move |_| {
             if is_pending.get_untracked() { return; }
             is_pending.set(true);
+            // Snapshot the active date NOW so a date change mid-debounce
+            // can't redirect the finalize to a different draft.
+            let active_date = selected_date.get_untracked();
             let exercise_name = exercise_name.clone();
             let cb = wasm_bindgen::closure::Closure::once(move || {
-                let today = crate::app::current_date();
                 state.history.update(|h| {
                     if let Some(i) = h.iter().position(|e| {
                         e.exercise_name == exercise_name
                             && e.day_name.is_none()
-                            && e.date == today
+                            && e.date == active_date
                             && !e.finalized
                     }) {
                         let has_completed = h[i].sets.iter().any(|s| s.completed);
@@ -477,6 +522,7 @@ fn ExerciseFreeformCard(
                                             reps_min=reps_min
                                             reps_max=reps_max
                                             set_idx=set_idx
+                                            selected_date=selected_date
                                         />
                                     }
                                 }
@@ -500,6 +546,9 @@ fn FreeformSetRow(
     reps_min: u32,
     reps_max: u32,
     set_idx: usize,
+    /// Page-level "logging for" date. Drives both the entry's `date` field and
+    /// each set's `completed_date`. The same signal is shared by every set row.
+    selected_date: RwSignal<String>,
 ) -> impl IntoView {
     let state = expect_context::<AppState>();
 
@@ -508,10 +557,10 @@ fn FreeformSetRow(
     let weight = {
         let exercise_name = exercise_name.clone();
         move || -> f32 {
-            let today = crate::app::current_date();
+            let active_date = selected_date.get();
             let history = state.history.get();
             if let Some(entry) = history.iter().find(|e| {
-                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized
+                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == active_date && !e.finalized
             }) {
                 return entry.sets.get(set_idx).map(|s| s.weight).unwrap_or(0.0);
             }
@@ -528,10 +577,10 @@ fn FreeformSetRow(
     let reps = {
         let exercise_name = exercise_name.clone();
         move || -> u32 {
-            let today = crate::app::current_date();
+            let active_date = selected_date.get();
             let history = state.history.get();
             if let Some(entry) = history.iter().find(|e| {
-                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized
+                e.exercise_name == exercise_name && e.day_name.is_none() && e.date == active_date && !e.finalized
             }) {
                 return entry.sets.get(set_idx).map(|s| s.reps).unwrap_or(reps_min);
             }
@@ -548,10 +597,10 @@ fn FreeformSetRow(
     let is_done = {
         let exercise_name = exercise_name.clone();
         move || {
-            let today = crate::app::current_date();
+            let active_date = selected_date.get();
             state.history.get()
                 .iter()
-                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == today && !e.finalized)
+                .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == active_date && !e.finalized)
                 .and_then(|e| e.sets.get(set_idx))
                 .map(|s| s.completed)
                 .unwrap_or(false)
@@ -565,11 +614,11 @@ fn FreeformSetRow(
         let exercise_id = exercise_id.clone();
         move |e| {
             let val: f32 = event_target_value(&e).parse().unwrap_or(0.0);
-            let today = crate::app::current_date();
+            let active_date = selected_date.get_untracked();
             state.history.update(|h| {
                 let i = get_or_create_freeform(
                     h, &exercise_name, &exercise_id,
-                    target_sets, reps_min, reps_max, &today,
+                    target_sets, reps_min, reps_max, &active_date,
                 );
                 if let Some(set) = h[i].sets.get_mut(set_idx) {
                     set.weight = val;
@@ -583,11 +632,11 @@ fn FreeformSetRow(
         let exercise_id = exercise_id.clone();
         move |e| {
             let val: u32 = event_target_value(&e).parse().unwrap_or(0);
-            let today = crate::app::current_date();
+            let active_date = selected_date.get_untracked();
             state.history.update(|h| {
                 let i = get_or_create_freeform(
                     h, &exercise_name, &exercise_id,
-                    target_sets, reps_min, reps_max, &today,
+                    target_sets, reps_min, reps_max, &active_date,
                 );
                 if let Some(set) = h[i].sets.get_mut(set_idx) {
                     set.reps = val;
@@ -600,16 +649,16 @@ fn FreeformSetRow(
         let exercise_name = exercise_name.clone();
         let exercise_id = exercise_id.clone();
         move |_| {
-            let today = crate::app::current_date();
+            let active_date = selected_date.get_untracked();
             state.history.update(|h| {
                 let i = get_or_create_freeform(
                     h, &exercise_name, &exercise_id,
-                    target_sets, reps_min, reps_max, &today,
+                    target_sets, reps_min, reps_max, &active_date,
                 );
                 if let Some(set) = h[i].sets.get_mut(set_idx) {
                     set.completed = !set.completed;
                     set.completed_date = if set.completed {
-                        Some(today.clone())
+                        Some(active_date.clone())
                     } else {
                         None
                     };
