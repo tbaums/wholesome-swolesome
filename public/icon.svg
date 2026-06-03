@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Wholesome Swolesome app icon.
+    Side-view dumbbell: two stacked weight plates flanking a gradient bar.
+    Black background, app's bi-flag-inspired palette (cyan + purple + pink).
+    iOS will round the corners; design lives inside an 80% safe area.
+  -->
+  <defs>
+    <linearGradient id="bar-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#5BCEFA"/>
+      <stop offset="50%"  stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#F5A9B8"/>
+    </linearGradient>
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1c1535"/>
+      <stop offset="100%" stop-color="#0f0d1f"/>
+    </linearGradient>
+    <filter id="soft-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background (iOS auto-rounds corners; fill the whole square) -->
+  <rect width="512" height="512" fill="url(#bg-grad)"/>
+
+  <!-- Bar (horizontal, gradient: cyan → purple → pink, with soft glow) -->
+  <g filter="url(#soft-glow)">
+    <rect x="120" y="244" width="272" height="24" rx="12" fill="url(#bar-grad)"/>
+  </g>
+
+  <!-- LEFT weight stack: smaller outer cyan + larger inner cyan -->
+  <rect x="60"  y="200" width="32" height="112" rx="10" fill="#5BCEFA" opacity="0.55"/>
+  <rect x="100" y="160" width="40" height="192" rx="14" fill="#5BCEFA"/>
+
+  <!-- RIGHT weight stack: larger inner pink + smaller outer pink -->
+  <rect x="372" y="160" width="40" height="192" rx="14" fill="#F5A9B8"/>
+  <rect x="420" y="200" width="32" height="112" rx="10" fill="#F5A9B8" opacity="0.55"/>
+
+  <!-- Bar collars (knurling hint) — tiny purple notches between plate and bar -->
+  <rect x="142" y="240" width="6"  height="32" rx="2" fill="#A855F7"/>
+  <rect x="364" y="240" width="6"  height="32" rx="2" fill="#A855F7"/>
+</svg>
