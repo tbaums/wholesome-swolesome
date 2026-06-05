@@ -650,8 +650,12 @@ fn FreeformCardioImportCard(
                  ```\n\
                  \n\
                  Use Apple's zone numbering 1–5. Omit any zone with 0 minutes. For `estimated_rpe`, \
-                 infer a 1–10 score from the zone distribution: mostly Z1/Z2 → 4–6; mostly Z3 → 6–7; \
-                 mostly Z4 → 7–8; significant Z5 → 9–10. The exercise is \"{exercise_name}\"; use that exact library_id."
+                 infer a 1–10 score from the zone distribution, matching the standard RPE-vs-HR-zone \
+                 mapping (Apple's zones are %-of-max-HR): mostly Z1/Z2 → 1–3 (very light to easy aerobic, \
+                 conversational); mostly Z3 → 4–6 (moderate tempo, harder to chat); mostly Z4 → 7–8 \
+                 (threshold, short sentences only); significant Z5 → 9–10 (max, can't talk). Use the \
+                 low end of each range for the lower zone in the pair (e.g. mostly Z1 → 1–2, mostly \
+                 Z2 → 2–3). The exercise is \"{exercise_name}\"; use that exact library_id."
             )
         }
     };
