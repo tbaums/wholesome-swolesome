@@ -644,7 +644,7 @@ mod tests {
     // ── Coach: history filtering ───────────────────────────────────────────
 
     #[wasm_bindgen_test]
-    fn coach_packet_excludes_non_finalized_and_incomplete_entries() {
+    fn coach_packet_includes_drafts_with_completed_sets_but_excludes_incomplete() {
         use crate::coach::{build_coach_packet, PacketInput};
         use crate::models::SetLog;
 
@@ -706,8 +706,14 @@ mod tests {
             target_date: "2026-05-26",
         });
 
+        // Finalized entries with completed sets ALWAYS show.
         assert!(packet.contains("Finalized Bench"), "finalized + completed entry should appear");
-        assert!(!packet.contains("Draft Squat"), "non-finalized entry should be excluded");
+        // Drafts with completed sets ALSO show — a checked-off set is real work
+        // even if the user never tapped the per-card ✓ to finalize the entry.
+        // Without this, the coach brief was inconsistent with cardio_minutes_in_window
+        // (totals counted drafts; the rundown didn't).
+        assert!(packet.contains("Draft Squat"), "draft with completed sets must appear");
+        // Entries with zero completed sets are still excluded — no real work happened.
         assert!(!packet.contains("Abandoned Row"), "entry with no completed sets should be excluded");
     }
 

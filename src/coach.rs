@@ -363,11 +363,17 @@ pub fn render_library_listing(library: &[LibraryExercise]) -> String {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn recent_history<'a>(history: &'a [ExerciseEntry], today: &str, window: i64) -> Vec<&'a ExerciseEntry> {
+    // We deliberately do NOT require `e.finalized` here. Freeform entries that
+    // the user logged sets on but never tapped the per-card ✓ button stay as
+    // drafts (`finalized: false`) — but their completed sets are real work
+    // and already count in `cardio_minutes_in_window`. Filtering them out of
+    // recent_history made the coach brief inconsistent with its own weekly
+    // totals (e.g. "logged 429 min" but the rundown only showed 266).
+    // A completed set is enough signal: the user explicitly checked it off.
     history
         .iter()
         .filter(|e| {
-            e.finalized
-                && e.sets.iter().any(|s| s.completed)
+            e.sets.iter().any(|s| s.completed)
                 && (0..=window).contains(&days_between(&e.date, today).unwrap_or(9999))
         })
         .collect()

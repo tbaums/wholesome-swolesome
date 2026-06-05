@@ -102,6 +102,12 @@ fn apply_cardio_actuals_to_freeform(
     }
     last.completed = true;
     last.completed_date = Some(selected_date.to_string());
+    // Importing an Apple Health screenshot is an explicit "I did this session"
+    // signal — finalize the entry so it lands in coach.rs::recent_history
+    // (and downstream history surfaces) without requiring a separate tap on
+    // the per-card ✓ button. Drafts with no completed sets stay drafts;
+    // only entries that pass through this importer get auto-finalized.
+    entry.finalized = true;
     total_minutes
 }
 
