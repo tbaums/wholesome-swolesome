@@ -267,4 +267,34 @@ test.describe('Freeform cardio: Apple Health zone-import flow', () => {
     expect(last.weight).toBe(0);
     expect(last.zone_minutes[0].minutes).toBe(20);
   });
+
+  test('import auto-finalizes the entry so it shows in the coach brief', async ({ page }) => {
+    // Regression: an imported zone payload used to land the entry as a draft
+    // (finalized: false) because the user never tapped the per-card ✓. The
+    // entry's minutes still counted in cardio_minutes_in_window totals, but
+    // the brief's "Recent training" section filtered it out — so the coach
+    // never saw what cardio the user actually did. The import is an explicit
+    // commit and should finalize.
+    await addCardioExercise(page, 'elliptical', 'Elliptical Trainer');
+    const importCard = page
+      .locator('.ex-card')
+      .filter({ hasText: 'Elliptical Trainer' })
+      .locator('.cardio-import-card');
+
+    const response = JSON.stringify({
+      cardio_actuals: {
+        exercise_id: 'Elliptical_Trainer',
+        zones: [{ zone: 2, minutes: 25 }, { zone: 3, minutes: 5 }],
+        estimated_rpe: 4,
+      },
+    });
+    await importCard.locator('textarea').fill(response);
+    await importCard.locator('button').filter({ hasText: 'Import zone minutes' }).click();
+
+    const entries = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('ws_ex_history') ?? '[]'),
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0].finalized).toBe(true);
+  });
 });
