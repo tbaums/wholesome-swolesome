@@ -193,6 +193,26 @@ test.describe('Freeform cardio: Apple Health zone-import flow', () => {
     expect(promptText).toMatch(/RPE/);
   });
 
+  test('RPE guidance maps Z1/Z2 to 1-3, not the old 4-6', async ({ page }) => {
+    // Regression guard: the original prompt told Claude that a mostly-Z2
+    // session was RPE 4–6, which is much higher than the standard
+    // exercise-physiology mapping (Z1 ≈ RPE 1–2, Z2 ≈ RPE 2–4). The fix
+    // brings Z1/Z2 down to 1–3 and pushes the higher zones down a notch.
+    // If this test fails, the prompt has drifted back toward the old values.
+    await addCardioExercise(page, 'elliptical', 'Elliptical Trainer');
+    const promptText = await page
+      .locator('.ex-card')
+      .filter({ hasText: 'Elliptical Trainer' })
+      .locator('.cardio-import-card .ci-prompt')
+      .textContent();
+    // Each zone's range should appear within ~30 chars of the zone marker
+    // (non-greedy match — catches drift even if other text moves around).
+    expect(promptText).toMatch(/Z1\/?Z2[^Z]{0,40}1[–-]3/i);
+    expect(promptText).toMatch(/Z3[^Z]{0,40}4[–-]6/i);
+    expect(promptText).toMatch(/Z4[^Z]{0,40}7[–-]8/i);
+    expect(promptText).toMatch(/Z5[^Z]{0,40}9[–-]10/i);
+  });
+
   test('a response with estimated_rpe writes it to set.weight', async ({ page }) => {
     await addCardioExercise(page, 'elliptical', 'Elliptical Trainer');
     const importCard = page
