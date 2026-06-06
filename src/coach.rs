@@ -234,6 +234,7 @@ pub fn build_coach_packet(input: PacketInput<'_>) -> String {
         r#"## Task
 
 Design ONE workout for the target date. Apply:
+- **No invented user preferences** — the user's behavioral constraints are **only** what's stated in the Goals section above: the freeform `Notes` block, the `Avoid / injuries` line (omitted entirely when empty), the equipment list, and the mobility/balance focus levels. **Do not infer additional preferences from the training history** (e.g. "the user avoids floor exercises because I see they often do standing variants" or "the user prefers cables because of recent sessions"). If a constraint isn't written verbatim in the Goals section, it does not exist — prescribe whatever the recovery / movement-balance rules below say is right, even if it's a movement pattern the user hasn't done lately. When you write the rationale, restrict the user-preference language to what's actually in the brief.
 - **Library-only** — every exercise must have a `library_id` copied verbatim from the table above. If the lift you want isn't in the table, pick the closest entry that IS rather than inventing one. No freeform names.
 - **Progressive overload** — if the user hit the top of their rep range on an exercise recently with good completion, bump weight ~2.5% (or one notch). If they missed reps, hold weight.
 - **Recovery science** — avoid muscles worked in the last 48h for high-intensity work; touch them only with low-volume accessory work if at all. Prioritize muscles in the "8-14 days" / "never" buckets.
