@@ -641,6 +641,39 @@ mod tests {
         );
     }
 
+    #[wasm_bindgen_test]
+    fn coach_packet_tells_claude_not_to_invent_user_preferences() {
+        // Regression: the planning model was hallucinating user preferences from
+        // sparse training history (e.g. asserting "her preference against floor
+        // exercises" and then "respecting" it), even though the user never
+        // stated such a preference. The Task block must explicitly forbid this.
+        use crate::coach::{build_coach_packet, PacketInput};
+        let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];
+        let packet = build_coach_packet(PacketInput {
+            goals: &UserGoals::default(),
+            history: &[],
+            library: &lib,
+            scheduled: &[],
+            today: "2026-06-06",
+            target_date: "2026-06-07",
+        });
+        assert!(
+            packet.contains("No invented user preferences"),
+            "packet must carry the no-invented-preferences rule",
+        );
+        // It should specifically call out the failure mode (inferring from history)
+        // because that's what the model is most prone to.
+        assert!(
+            packet.to_lowercase().contains("infer additional preferences from the training history"),
+            "packet should forbid inferring preferences from training history",
+        );
+        // And use a concrete example so the model recognizes the pattern.
+        assert!(
+            packet.contains("floor exercises"),
+            "packet should include the canonical floor-exercises example: {packet}",
+        );
+    }
+
     // ── Coach: history filtering ───────────────────────────────────────────
 
     #[wasm_bindgen_test]
