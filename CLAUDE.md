@@ -111,7 +111,7 @@ session_id,date,day_name,exercise_name,set_number,reps,weight,completed
 
 So a freeform exercise named "Barbell Squat" will color the heatmap correctly because its name matches `Barbell Squat` in the library. A freeform exercise named "Squat With My Special Bar" will not, even if the user means the same lift. This is intentional — wrong colors are worse than uncolored.
 
-Entries whose library `category` is `stretching` are excluded from `last_hit_by_muscle` entirely: a 30s cooldown stretch is not "work" and creates no recovery demand, so it must not mark a muscle as recently worked in the Coach Brief recovery table or the heatmap. Stretch recency has its own table in the brief via `coach::last_stretched_by_muscle`.
+Entries whose library `category` is `stretching` or `balance` are excluded from `last_hit_by_muscle` entirely: a 30s cooldown stretch or a 20-45s balance hold is not "work" and creates no recovery demand, so it must not mark a muscle as recently worked in the Coach Brief recovery table or the heatmap. Stretch recency has its own table in the brief via `coach::last_stretched_by_muscle`; balance work shows up in the brief's recent-training rundown.
 
 Muscle keys used by both library and `body_heatmap.rs`: `abdominals`, `abductors`, `adductors`, `biceps`, `calves`, `chest`, `forearms`, `glutes`, `hamstrings`, `lats`, `lower back`, `middle back`, `neck`, `quadriceps`, `shoulders`, `traps`, `triceps`. Keep these in sync if the library source changes.
 

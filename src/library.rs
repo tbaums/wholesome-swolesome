@@ -155,11 +155,11 @@ pub fn is_bodyweight_exercise(
 /// it was hit by a completed set. Primary muscles count fully; secondary
 /// muscles count too (treated equally for recency — recovery, not volume).
 ///
-/// Stretching entries do NOT count as "worked": the 30s cooldown holds the
-/// app prescribes are neither a training stimulus nor a recovery cost, so
-/// crediting them here would tell the coach (and heatmap) a muscle is still
-/// recovering when it isn't. Stretch recency is tracked separately by
-/// `coach::last_stretched_by_muscle`.
+/// Stretching and balance entries do NOT count as "worked": the 30s cooldown
+/// stretches and 20-45s balance holds the app prescribes are neither a
+/// training stimulus nor a recovery cost, so crediting them here would tell
+/// the coach (and heatmap) a muscle is still recovering when it isn't.
+/// Stretch recency is tracked separately by `coach::last_stretched_by_muscle`.
 pub fn last_hit_by_muscle(
     history: &[ExerciseEntry],
     library: &[LibraryExercise],
@@ -181,7 +181,7 @@ pub fn last_hit_by_muscle(
             .copied()
             .or_else(|| by_name.get(&entry.exercise_name.to_lowercase()).copied());
         let Some(lib) = lib else { continue };
-        if lib.category == "stretching" {
+        if lib.category == "stretching" || lib.category == "balance" {
             continue;
         }
         for m in lib.primary_muscles.iter().chain(lib.secondary_muscles.iter()) {
