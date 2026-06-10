@@ -1,0 +1,30 @@
+# Cuts a release: creates the tag at the chosen commit and publishes a GitHub
+# Release with auto-generated notes. Manually dispatched (Actions → Release →
+# Run workflow) because remote agent sessions can't push tags through the git
+# proxy — this is the supported path for them too.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create tag + GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ inputs.tag }}" \
+            --target "${{ github.sha }}" \
+            --title "${{ inputs.tag }}" \
+            --generate-notes
