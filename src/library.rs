@@ -154,6 +154,12 @@ pub fn is_bodyweight_exercise(
 /// For each free-exercise-db muscle key, the most recent date (YYYY-MM-DD)
 /// it was hit by a completed set. Primary muscles count fully; secondary
 /// muscles count too (treated equally for recency — recovery, not volume).
+///
+/// Stretching and balance entries do NOT count as "worked": the 30s cooldown
+/// stretches and 20-45s balance holds the app prescribes are neither a
+/// training stimulus nor a recovery cost, so crediting them here would tell
+/// the coach (and heatmap) a muscle is still recovering when it isn't.
+/// Stretch recency is tracked separately by `coach::last_stretched_by_muscle`.
 pub fn last_hit_by_muscle(
     history: &[ExerciseEntry],
     library: &[LibraryExercise],
@@ -170,29 +176,22 @@ pub fn last_hit_by_muscle(
         if !entry.sets.iter().any(|s| s.completed) {
             continue;
         }
-        let muscles = lookup_muscles(entry, &by_id, &by_name);
-        for m in muscles {
-            last.entry(m)
+        let lib = by_id
+            .get(entry.exercise_id.as_str())
+            .copied()
+            .or_else(|| by_name.get(&entry.exercise_name.to_lowercase()).copied());
+        let Some(lib) = lib else { continue };
+        if lib.category == "stretching" || lib.category == "balance" {
+            continue;
+        }
+        for m in lib.primary_muscles.iter().chain(lib.secondary_muscles.iter()) {
+            last.entry(m.clone())
                 .and_modify(|d| if entry.date.as_str() > d.as_str() { *d = entry.date.clone() })
                 .or_insert_with(|| entry.date.clone());
         }
     }
 
     last
-}
-
-fn lookup_muscles(
-    entry: &ExerciseEntry,
-    by_id: &HashMap<&str, &LibraryExercise>,
-    by_name: &HashMap<String, &LibraryExercise>,
-) -> Vec<String> {
-    let lib = by_id
-        .get(entry.exercise_id.as_str())
-        .or_else(|| by_name.get(&entry.exercise_name.to_lowercase()));
-    let Some(lib) = lib else { return Vec::new() };
-    let mut out = lib.primary_muscles.clone();
-    out.extend(lib.secondary_muscles.iter().cloned());
-    out
 }
 
 /// Days between two YYYY-MM-DD strings (b - a). Returns None on parse failure.

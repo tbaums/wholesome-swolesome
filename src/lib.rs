@@ -1083,6 +1083,95 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    fn last_hit_excludes_stretching_and_balance_categories() {
+        use crate::library::last_hit_by_muscle;
+        let mut calf_stretch = lib_entry_with_cat("Calf_Stretch_Elbows_Against_Wall", "Calf Stretch Elbows Against Wall", "stretching");
+        calf_stretch.primary_muscles = vec!["calves".into()];
+        calf_stretch.secondary_muscles = vec![];
+        let mut hamstring_stretch = lib_entry_with_cat("Standing_Hamstring_Stretch", "Standing Hamstring Stretch", "stretching");
+        hamstring_stretch.primary_muscles = vec!["hamstrings".into()];
+        hamstring_stretch.secondary_muscles = vec![];
+        let mut single_leg_stand = lib_entry_with_cat("Single-Leg_Stand", "Single-Leg Stand", "balance");
+        single_leg_stand.primary_muscles = vec!["calves".into()];
+        single_leg_stand.secondary_muscles = vec!["glutes".into()];
+        let mut squat = lib_entry_with_cat("Barbell_Squat", "Squat", "strength");
+        squat.primary_muscles = vec!["quadriceps".into()];
+        squat.secondary_muscles = vec!["hamstrings".into()];
+        let lib = vec![calf_stretch, hamstring_stretch, single_leg_stand, squat];
+
+        let stretch_set = vec![crate::models::SetLog { set_number: 1, reps: 1, weight: 0.0, completed: true, completed_date: None, duration_seconds: Some(30), zone_minutes: None }];
+        // Squat (strength) on 5/26; both stretches on 5/28 — more recent.
+        let squat_entry = ExerciseEntry {
+            id: "sq1".into(),
+            date: "2026-05-26".into(),
+            exercise_name: "Squat".into(),
+            exercise_id: "Barbell_Squat".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 3, reps_min: 5, reps_max: 5,
+            sets: vec![crate::models::SetLog { set_number: 1, reps: 5, weight: 225.0, completed: true, completed_date: None, duration_seconds: None, zone_minutes: None }],
+            finalized: true,
+            created_at: "2026-05-26T10:00:00.000Z".into(),
+            target_duration_seconds: None,
+        };
+        let calf_stretch_entry = ExerciseEntry {
+            id: "cs1".into(),
+            date: "2026-05-28".into(),
+            exercise_name: "Calf Stretch Elbows Against Wall".into(),
+            exercise_id: "Calf_Stretch_Elbows_Against_Wall".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 2, reps_min: 1, reps_max: 1,
+            sets: stretch_set.clone(),
+            finalized: true,
+            created_at: "2026-05-28T10:00:00.000Z".into(),
+            target_duration_seconds: Some(30),
+        };
+        let hamstring_stretch_entry = ExerciseEntry {
+            id: "hs1".into(),
+            date: "2026-05-28".into(),
+            exercise_name: "Standing Hamstring Stretch".into(),
+            exercise_id: "Standing_Hamstring_Stretch".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 2, reps_min: 1, reps_max: 1,
+            sets: stretch_set.clone(),
+            finalized: true,
+            created_at: "2026-05-28T10:01:00.000Z".into(),
+            target_duration_seconds: Some(30),
+        };
+        let balance_entry = ExerciseEntry {
+            id: "bal1".into(),
+            date: "2026-05-28".into(),
+            exercise_name: "Single-Leg Stand".into(),
+            exercise_id: "Single-Leg_Stand".into(),
+            session_id: None,
+            day_id: None,
+            day_name: None,
+            target_sets: 2, reps_min: 1, reps_max: 1,
+            sets: stretch_set,
+            finalized: true,
+            created_at: "2026-05-28T10:02:00.000Z".into(),
+            target_duration_seconds: Some(30),
+        };
+
+        let last = last_hit_by_muscle(
+            &[squat_entry, calf_stretch_entry, hamstring_stretch_entry, balance_entry],
+            &lib,
+        );
+        // calves were only stretched + balanced, never trained — must not appear as "worked"
+        assert!(!last.contains_key("calves"), "stretch/balance-only muscles must not count as worked");
+        // glutes were only hit by the balance hold — also not "worked"
+        assert!(!last.contains_key("glutes"), "balance-only muscles must not count as worked");
+        // hamstrings: the 5/28 stretch must not override the 5/26 strength work
+        assert_eq!(last.get("hamstrings").map(String::as_str), Some("2026-05-26"));
+        assert_eq!(last.get("quadriceps").map(String::as_str), Some("2026-05-26"));
+    }
+
+    #[wasm_bindgen_test]
     fn coach_packet_includes_cardio_and_mobility_sections() {
         use crate::coach::{build_coach_packet, PacketInput};
         let lib = vec![lib_entry("Barbell_Bench_Press_-_Medium_Grip", "Bench Press")];

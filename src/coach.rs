@@ -121,6 +121,7 @@ pub fn build_coach_packet(input: PacketInput<'_>) -> String {
 
     // ── Muscle recovery state ───────────────────────────────────────────────
     out.push_str("## Muscle recovery state (days since last worked)\n\n");
+    out.push_str("_\"Worked\" means strength/cardio/plyometric training. Stretching and balance work do not count — stretching is tracked separately in the mobility table above, and balance drills appear in the recent-training rundown below._\n\n");
     let last = last_hit_by_muscle(input.history, input.library);
     out.push_str("| Muscle | Days ago | Recovery |\n|---|---:|---|\n");
     for m in ALL_MUSCLES {
