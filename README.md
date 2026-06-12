@@ -4,6 +4,12 @@ A mobile-first PWA workout tracker built in Rust + Leptos (WASM). Instead of han
 
 **Live app:** https://tbaums.github.io/wholesome-swolesome/ · **Tour:** [docs/walkthrough.md](docs/walkthrough.md) — screenshots + the design choices, for sending to peers.
 
+<p align="center">
+  <img src="docs/walkthrough/06-today-scheduled.png" width="260" alt="Today card — the coach-generated workout scheduled for today">
+  <img src="docs/walkthrough/07-session-view.png" width="260" alt="Session view — per-set weight/reps logging with pre-filled values">
+  <img src="docs/walkthrough/08-heatmap-after.png" width="260" alt="History heatmap — body silhouette colored by days since each muscle was worked">
+</p>
+
 ## What's in the app
 
 - **Today** — the workout the coach has planned for today (generated locally, or imported from a nightly agent run); per-set inputs pre-fill from your last session
