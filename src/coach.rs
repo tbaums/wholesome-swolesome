@@ -145,19 +145,37 @@ pub fn build_coach_packet(input: PacketInput<'_>) -> String {
     if recent.is_empty() {
         out.push_str("_No completed sessions in the window._\n\n");
     } else {
+        // The header is the session's PLANNED title; the bullets are what was
+        // actually logged. These can diverge — a day planned as "Upper Pull"
+        // whose pull lifts were never logged still carries that title — so the
+        // distinction must be explicit or the coach mis-credits planned-but-
+        // skipped work as done (real failure mode observed in generation).
+        out.push_str(
+            "_Each header below is the session's **planned title** (what was prescribed that day). \
+The bullets under it are what you **actually logged** — completed sets only. \
+**Trust only the bullets for what was trained.** A planned title can name muscles or movements \
+that were never logged (e.g. an \"Upper Pull\" day with no row/pulldown bullet means that pull work \
+was planned but **not done**). When the title and the bullets disagree, the bullets win — count only \
+logged exercises as trained. The recovery tables above are computed from logged work, never titles._\n\n",
+        );
         let by_date = group_by_date(&recent);
         let mut dates: Vec<_> = by_date.keys().collect();
         dates.sort();
         dates.reverse();
         for date in dates {
             let entries = &by_date[date];
-            let day_name = entries
-                .iter()
-                .find_map(|e| e.day_name.as_deref())
-                .unwrap_or("Freeform");
-            out.push_str(&format!("### {date} — {day_name}\n"));
+            match entries.iter().find_map(|e| e.day_name.as_deref()) {
+                Some(name) => out.push_str(&format!("### {date} — planned: {name}\n")),
+                None => out.push_str(&format!("### {date} — Freeform (ad-hoc)\n")),
+            }
             for e in entries {
                 let done: Vec<_> = e.sets.iter().filter(|s| s.completed).collect();
+                // Strictly logged work only: an exercise with no completed set
+                // was planned/started but not done, and must never render as a
+                // training entry the coach could read as completed.
+                if done.is_empty() {
+                    continue;
+                }
                 let summary: Vec<String> = done
                     .iter()
                     .map(|s| {
@@ -644,4 +662,94 @@ pub fn validate_exercises_against_library(
         ));
     }
     Err(msg)
+}
+
+#[cfg(test)]
+mod recent_training_tests {
+    use super::*;
+    use crate::models::{PrimaryGoal, SetLog};
+
+    fn goals() -> UserGoals {
+        UserGoals {
+            primary_goal: PrimaryGoal::default(),
+            sessions_per_week: 6,
+            session_minutes: 40,
+            equipment: vec![],
+            avoid: String::new(),
+            notes: String::new(),
+            weekly_cardio_minutes_target: None,
+            vo2_max_latest: None,
+            vo2_max_updated: None,
+            mobility_focus: FocusLevel::default(),
+            balance_focus: FocusLevel::default(),
+        }
+    }
+
+    fn entry(date: &str, day_name: Option<&str>, ex: &str, completed_sets: u32) -> ExerciseEntry {
+        ExerciseEntry {
+            id: format!("{date}-{ex}"),
+            date: date.into(),
+            exercise_name: ex.into(),
+            exercise_id: ex.replace(' ', "_"),
+            session_id: None,
+            day_id: None,
+            day_name: day_name.map(Into::into),
+            target_sets: 3,
+            reps_min: 8,
+            reps_max: 12,
+            sets: (0..3)
+                .map(|i| SetLog {
+                    set_number: i,
+                    reps: 10,
+                    weight: 50.0,
+                    completed: i < completed_sets,
+                    ..Default::default()
+                })
+                .collect(),
+            finalized: true,
+            created_at: String::new(),
+            target_duration_seconds: None,
+        }
+    }
+
+    // A session PLANNED as "Upper Pull" where the pull lifts were never logged
+    // must not read as if pull work was done: the header is marked `planned:`,
+    // the planned-vs-logged note is present, and an exercise with zero completed
+    // sets never renders as a training entry. (Regression: the coach was
+    // mis-crediting planned-but-skipped work as completed.)
+    #[test]
+    fn planned_title_is_labeled_and_undone_exercises_are_omitted() {
+        let g = goals();
+        let history = vec![
+            entry("2026-06-13", Some("Upper Pull Maintenance"), "Single-Leg Stand", 2),
+            entry("2026-06-13", Some("Upper Pull Maintenance"), "Seated Cable Rows", 0),
+        ];
+        let lib: Vec<LibraryExercise> = vec![];
+        let sched: Vec<ScheduledWorkout> = vec![];
+        let out = build_coach_packet(PacketInput {
+            goals: &g,
+            history: &history,
+            library: &lib,
+            scheduled: &sched,
+            today: "2026-06-14",
+            target_date: "2026-06-14",
+        });
+
+        assert!(
+            out.contains("planned: Upper Pull Maintenance"),
+            "session header must label the title as PLANNED, not completed:\n{out}"
+        );
+        assert!(
+            out.contains("Trust only the bullets for what was trained"),
+            "the planned-vs-logged clarifying note must be present"
+        );
+        assert!(
+            !out.contains("Seated Cable Rows"),
+            "an exercise with zero completed sets must NOT render as done:\n{out}"
+        );
+        assert!(
+            out.contains("Single-Leg Stand"),
+            "an actually-logged exercise must still appear"
+        );
+    }
 }
