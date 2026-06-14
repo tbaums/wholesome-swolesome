@@ -145,18 +145,17 @@ pub fn build_coach_packet(input: PacketInput<'_>) -> String {
     if recent.is_empty() {
         out.push_str("_No completed sessions in the window._\n\n");
     } else {
-        // The header is the session's PLANNED title; the bullets are what was
-        // actually logged. These can diverge — a day planned as "Upper Pull"
-        // whose pull lifts were never logged still carries that title — so the
-        // distinction must be explicit or the coach mis-credits planned-but-
-        // skipped work as done (real failure mode observed in generation).
+        // Show only what was actually LOGGED — date + completed exercises. The
+        // session's planned title (day_name) is deliberately omitted: it names
+        // the prescribed plan, which routinely diverges from what was completed
+        // (a day planned "Upper Pull" whose pull lifts were never logged), and
+        // including it made the coach mis-credit planned-but-skipped work as
+        // done. The exercises + recovery tables convey what was trained; the
+        // title only added a competing, unreliable narrative.
         out.push_str(
-            "_Each header below is the session's **planned title** (what was prescribed that day). \
-The bullets under it are what you **actually logged** — completed sets only. \
-**Trust only the bullets for what was trained.** A planned title can name muscles or movements \
-that were never logged (e.g. an \"Upper Pull\" day with no row/pulldown bullet means that pull work \
-was planned but **not done**). When the title and the bullets disagree, the bullets win — count only \
-logged exercises as trained. The recovery tables above are computed from logged work, never titles._\n\n",
+            "_Every exercise below is work you actually logged (completed sets only) — this is the \
+ground truth of what was trained, and the recovery tables above are computed from it. Session plan \
+titles are intentionally omitted, since a plan can name work that was never done._\n\n",
         );
         let by_date = group_by_date(&recent);
         let mut dates: Vec<_> = by_date.keys().collect();
@@ -164,10 +163,7 @@ logged exercises as trained. The recovery tables above are computed from logged 
         dates.reverse();
         for date in dates {
             let entries = &by_date[date];
-            match entries.iter().find_map(|e| e.day_name.as_deref()) {
-                Some(name) => out.push_str(&format!("### {date} — planned: {name}\n")),
-                None => out.push_str(&format!("### {date} — Freeform (ad-hoc)\n")),
-            }
+            out.push_str(&format!("### {date}\n"));
             for e in entries {
                 let done: Vec<_> = e.sets.iter().filter(|s| s.completed).collect();
                 // Strictly logged work only: an exercise with no completed set
@@ -736,12 +732,12 @@ mod recent_training_tests {
         });
 
         assert!(
-            out.contains("planned: Upper Pull Maintenance"),
-            "session header must label the title as PLANNED, not completed:\n{out}"
+            !out.contains("Upper Pull Maintenance"),
+            "the planned session title must be omitted entirely, not shown:\n{out}"
         );
         assert!(
-            out.contains("Trust only the bullets for what was trained"),
-            "the planned-vs-logged clarifying note must be present"
+            out.contains("ground truth of what was trained"),
+            "the logged-only clarifying note must be present"
         );
         assert!(
             !out.contains("Seated Cable Rows"),
