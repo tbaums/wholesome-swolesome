@@ -79,10 +79,18 @@ Each library entry has `id`, `name`, `primaryMuscles`, `secondaryMuscles`, `equi
 
 ## Step 3 — Reason about recovery
 
-Walk `exercise_history` for the **last 14 days**. For each completed `ExerciseEntry`, look
-up the exercise in the library (match by `exercise_id` first, then by `exercise_name` case-insensitive).
-Sum the muscles hit (primary + secondary). For each of these 17 muscles, find the most recent
-date worked:
+> **Completed sets are the ground truth — never the session title.** Each `ExerciseEntry`
+> carries a `day_name` (and the day may have a planned title): that is the *prescribed plan*,
+> which routinely diverges from what was actually done (a day planned "Upper Pull" whose pull
+> lifts were never logged still carries that title). **Ignore `day_name`/titles entirely for
+> recovery.** Count a muscle as worked ONLY through an exercise that has at least one set with
+> `completed: true`. An exercise with no completed set was planned-but-skipped and must be
+> treated as *not done* — its muscles are still un-trained.
+
+Walk `exercise_history` for the **last 14 days**. For each `ExerciseEntry` **with at least one
+completed set**, look up the exercise in the library (match by `exercise_id` first, then by
+`exercise_name` case-insensitive). Sum the muscles hit (primary + secondary). For each of these
+17 muscles, find the most recent date worked (counting only completed sets):
 
 ```
 chest, shoulders, biceps, triceps, forearms, abdominals,
