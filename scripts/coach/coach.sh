@@ -44,18 +44,21 @@ curl -fsSL "https://raw.githubusercontent.com/$WS_APP_REPO/main/public/data/exer
 echo "[coach] library entries: $(jq 'length' "$TMP/exercises.json")"
 
 # ── Compose the brief and call Claude ────────────────────────────────────────
+# The brief is built by the shared `coach-brief` generator (#38) — the SAME
+# `coach::build_coach_packet` the in-app Coach Brief uses — so the coaching
+# logic (recovery tables, recent-training, planned-vs-logged handling) lives in
+# exactly one place. The generator output is a complete prompt (state + library
+# + task + response format), so we feed it straight to claude.
 BRIEF="$TMP/brief.md"
-{
-  echo "# Coach Task — generate workout for $WS_TARGET_DATE"
-  echo
-  echo "## Current state (state.json)"
-  echo '```json'
-  cat "$TMP/state.json"
-  echo
-  echo '```'
-  echo
-  cat "$(dirname "$0")/PROMPT.md"
-} > "$BRIEF"
+TODAY="$(date +%Y-%m-%d)"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+COACH_BRIEF_BIN="$REPO_ROOT/target/release/coach-brief"
+if [ ! -x "$COACH_BRIEF_BIN" ]; then
+  echo "[coach] building coach-brief generator..."
+  ( cd "$REPO_ROOT" && cargo build --release --bin coach-brief )
+fi
+"$COACH_BRIEF_BIN" "$TMP/state.json" "$TMP/exercises.json" "$TODAY" "$WS_TARGET_DATE" > "$BRIEF"
+echo "[coach] brief built ($(wc -l < "$BRIEF") lines) via shared generator"
 
 echo "[coach] invoking claude (this may take 30-90s)..."
 RESPONSE="$TMP/response.json"
