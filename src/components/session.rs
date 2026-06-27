@@ -554,7 +554,6 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         let is_bw_b = is_bodyweight_branch.clone();
         let is_done_b = is_done.clone();
         let toggle_done_b = toggle_done.clone();
-        let weight_str = weight_str.clone();
         let reps_str = reps_str.clone();
         let on_weight_change = on_weight_change.clone();
         let on_reps_change = on_reps_change.clone();
@@ -653,7 +652,6 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                     }.into_any()
                 } else {
                     // Standard: weight × reps.
-                    let weight_str = weight_str.clone();
                     let on_weight_change = on_weight_change.clone();
                     let reps_str = reps_str.clone();
                     let on_reps_change = on_reps_change.clone();
