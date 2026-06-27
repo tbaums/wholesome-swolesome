@@ -57,9 +57,10 @@ async function freshWithDate(page: import('@playwright/test').Page) {
 }
 
 test.describe('Cardio session UI', () => {
-  test('cardio exercise shows min/RPE inputs instead of weight/reps', async ({ page }) => {
+  test('freeform cardio shows a Z1-Z5 heart-rate zone grid (not min/RPE)', async ({ page }) => {
     await freshWithDate(page);
 
+    // scheduledWorkout has no target_zones — i.e. freeform cardio.
     await page.evaluate(
       (val) => localStorage.setItem('ws_scheduled_workouts', val),
       JSON.stringify([scheduledWorkout(TODAY)]),
@@ -79,14 +80,63 @@ test.describe('Cardio session UI', () => {
       return body?.classList.contains('open');
     });
 
-    // Library loads async — wait for the cardio UI to appear
-    const setRow = page.locator('.set-row').first();
-    await expect(setRow.locator('.set-x')).toHaveText('@', { timeout: 10_000 });
+    // Library loads async — wait for the zone grid to appear.
+    const setRow = page.locator('.set-row-zones').first();
+    await expect(setRow).toBeVisible({ timeout: 10_000 });
 
-    // Check placeholders: "min" and "RPE"
-    const inputs = setRow.locator('.set-num-input');
-    await expect(inputs.first()).toHaveAttribute('placeholder', 'min');
-    await expect(inputs.last()).toHaveAttribute('placeholder', 'RPE');
+    // All five HR zones are inputtable, even with no coach prescription.
+    const zoneRows = setRow.locator('.zone-row');
+    await expect(zoneRows).toHaveCount(5);
+    await expect(zoneRows.nth(0).locator('.zone-label')).toHaveText('Z1');
+    await expect(zoneRows.nth(4).locator('.zone-label')).toHaveText('Z5');
+    await expect(zoneRows.first().locator('.zone-input')).toHaveAttribute('placeholder', 'min');
+
+    // No min/RPE fallback ("@" separator) and no prescribed "/ X min" targets.
+    await expect(setRow.locator('.set-x')).toHaveCount(0);
+    await expect(setRow.locator('.zone-target')).toHaveCount(0);
+
+    // The screenshot/JSON import card is offered for freeform cardio too.
+    await expect(page.locator('.cardio-import-card')).toBeVisible();
+  });
+
+  test('prescribed cardio shows all 5 zones, prescribed ones targeted + pre-filled', async ({ page }) => {
+    await freshWithDate(page);
+
+    // A coach workout that prescribes only Z1 (13 min) and Z4 (16 min).
+    const wk = {
+      id: 'w-zone', date: TODAY, name: 'Zone intervals', rationale: '', source: 'Coach',
+      exercises: [{
+        library_id: 'Running_Treadmill', name: 'Running, Treadmill',
+        target_sets: 1, reps_min: 29, reps_max: 29, rest_seconds: 0, notes: null,
+        target_zones: [{ zone: 1, minutes: 13 }, { zone: 4, minutes: 16 }],
+      }],
+      created_at: '2026-06-09T20:00:00.000Z',
+    };
+    await page.evaluate(
+      (val) => localStorage.setItem('ws_scheduled_workouts', val),
+      JSON.stringify([wk]),
+    );
+    await page.reload();
+    await page.waitForSelector('.bottom-nav');
+    await page.locator('button').filter({ hasText: 'Start workout' }).click();
+    await page.waitForSelector('.ex-card');
+    await page.locator('.exercise-chevron').first().click();
+
+    const setRow = page.locator('.set-row-zones').first();
+    await expect(setRow).toBeVisible({ timeout: 10_000 });
+
+    // Still all 5 zones — not just the 2 prescribed.
+    await expect(setRow.locator('.zone-row')).toHaveCount(5);
+
+    // Only the prescribed zones carry a "/ X min" target.
+    await expect(setRow.locator('.zone-target')).toHaveCount(2);
+
+    // Prescribed zone inputs are pre-filled with the coach's minutes (editable);
+    // non-prescribed zones start blank.
+    const zoneInputs = setRow.locator('.zone-input');
+    await expect(zoneInputs.nth(0)).toHaveValue('13'); // Z1
+    await expect(zoneInputs.nth(1)).toHaveValue('');   // Z2
+    await expect(zoneInputs.nth(3)).toHaveValue('16'); // Z4
   });
 
   test('exercise meta shows minutes instead of sets x reps for cardio', async ({ page }) => {

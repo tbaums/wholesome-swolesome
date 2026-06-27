@@ -398,7 +398,15 @@ pub fn new_session_from_scheduled(
                         completed: false,
                         completed_date: None,
                         duration_seconds: ex.target_duration_seconds,
-                        zone_minutes: None,
+                        // Pre-fill the first cardio set's zone actuals with the
+                        // coach's prescribed minutes, so prescribed zones start at
+                        // the planned value (editable). Freeform cardio has no
+                        // target_zones, so it starts blank.
+                        zone_minutes: if is_cardio && n == 1 {
+                            ex.target_zones.clone()
+                        } else {
+                            None
+                        },
                     }
                 })
                 .collect();

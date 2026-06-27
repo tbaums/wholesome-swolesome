@@ -484,36 +484,6 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         if r == 0 { String::new() } else { r.to_string() }
     };
 
-    let is_cardio = {
-        let ex_id = ex_id.clone();
-        move || {
-            let Some(session) = state.active_session.get() else { return false; };
-            let Some(log) = session.exercise_logs.iter().find(|e| e.exercise_id == ex_id) else {
-                return false;
-            };
-            crate::library::is_cardio_exercise(
-                &log.exercise_id,
-                &log.exercise_name,
-                &state.library.get(),
-            )
-        }
-    };
-
-    let is_bodyweight = {
-        let ex_id = ex_id.clone();
-        move || {
-            let Some(session) = state.active_session.get() else { return false; };
-            let Some(log) = session.exercise_logs.iter().find(|e| e.exercise_id == ex_id) else {
-                return false;
-            };
-            crate::library::is_bodyweight_exercise(
-                &log.exercise_id,
-                &log.exercise_name,
-                &state.library.get(),
-            )
-        }
-    };
-
     let duration_str = move || {
         let d = duration();
         if d == 0 { String::new() } else { d.to_string() }
@@ -531,76 +501,29 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
         .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
         .and_then(|e| e.target_zones)
         .unwrap_or_default();
-    let is_zone_cardio = !zone_targets.is_empty();
+    let _is_zone_cardio = !zone_targets.is_empty();
+
+    // Cardio/bodyweight detection for the BRANCH decision reads only the library
+    // signal (not active_session), so typing a zone/rep value doesn't re-render
+    // the whole row and drop input focus — inputs are created once and only their
+    // prop:value reacts. The exercise id/name are stable for the session.
+    let ex_name: String = state.active_session.get_untracked()
+        .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).map(|e| e.exercise_name.clone()))
+        .unwrap_or_default();
+    let is_cardio_branch = {
+        let ex_id = ex_id.clone();
+        let ex_name = ex_name.clone();
+        move || crate::library::is_cardio_exercise(&ex_id, &ex_name, &state.library.get())
+    };
+    let is_bodyweight_branch = {
+        let ex_id = ex_id.clone();
+        let ex_name = ex_name.clone();
+        move || crate::library::is_bodyweight_exercise(&ex_id, &ex_name, &state.library.get())
+    };
 
     let is_done2 = is_done.clone();
 
-    if is_zone_cardio {
-        let ex_id_for_zone = ex_id.clone();
-        view! {
-            <div class="set-row set-row-zones" class:set-done=is_done>
-                <span class="set-num">"Set " {set_idx + 1}</span>
-                <div class="zone-grid">
-                    {zone_targets.iter().map(|zt| {
-                        let zone = zt.zone;
-                        let target_min = zt.minutes;
-                        let ex_id = ex_id_for_zone.clone();
-                        let read_actual = {
-                            let ex_id = ex_id.clone();
-                            move || -> String {
-                                state.active_session.get()
-                                    .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
-                                    .and_then(|e| e.sets.get(set_idx).cloned())
-                                    .and_then(|s| s.zone_minutes)
-                                    .and_then(|zs| zs.into_iter().find(|z| z.zone == zone))
-                                    .map(|z| z.minutes.to_string())
-                                    .unwrap_or_default()
-                            }
-                        };
-                        let on_input = {
-                            let ex_id = ex_id.clone();
-                            move |e: leptos::ev::Event| {
-                                // Accept fractional minutes (Apple Health reports them).
-                                let val: f32 = event_target_value(&e).parse().unwrap_or(0.0);
-                                state.active_session.update(|opt| {
-                                    if let Some(s) = opt.as_mut() {
-                                        if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {
-                                            if let Some(set) = log.sets.get_mut(set_idx) {
-                                                let mut zm = set.zone_minutes.clone().unwrap_or_default();
-                                                if let Some(existing) = zm.iter_mut().find(|z| z.zone == zone) {
-                                                    existing.minutes = val;
-                                                } else {
-                                                    zm.push(crate::models::ZoneTarget { zone, minutes: val });
-                                                }
-                                                set.zone_minutes = Some(zm);
-                                            }
-                                        }
-                                    }
-                                });
-                            }
-                        };
-                        view! {
-                            <div class="zone-row">
-                                <span class="zone-label">"Z" {zone}</span>
-                                <input
-                                    type="number"
-                                    inputmode="numeric"
-                                    step="1"
-                                    min="0"
-                                    class="set-num-input zone-input"
-                                    placeholder="min"
-                                    prop:value=read_actual
-                                    on:input=on_input
-                                />
-                                <span class="zone-target">"/ " {target_min} " min"</span>
-                            </div>
-                        }
-                    }).collect_view()}
-                </div>
-                <button class="set-done-btn" class:done=is_done2 on:click=toggle_done>"✓"</button>
-            </div>
-        }.into_any()
-    } else if is_dur_static {
+    if is_dur_static {
         view! {
             <div class="set-row" class:set-done=is_done>
                 <span class="set-num">"Set " {set_idx + 1}</span>
@@ -621,55 +544,99 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
             </div>
         }.into_any()
     } else {
+        // Any cardio (coach-prescribed OR freeform) → one Z1-5 heart-rate zone
+        // grid. Prescribed zones show their "/ X min" target (and start pre-filled
+        // via the session's pre-fill); the rest are blank and editable. Non-cardio
+        // → strength (bodyweight reps or weight × reps).
+        let ex_id_b = ex_id.clone();
+        let zt_b = zone_targets.clone();
+        let is_cardio_b = is_cardio_branch.clone();
+        let is_bw_b = is_bodyweight_branch.clone();
+        let is_done_b = is_done.clone();
+        let toggle_done_b = toggle_done.clone();
+        let weight_str = weight_str.clone();
+        let reps_str = reps_str.clone();
+        let on_weight_change = on_weight_change.clone();
+        let on_reps_change = on_reps_change.clone();
         view! {
-            <div class="set-row" class:set-done=is_done>
-                <span class="set-num">"Set " {set_idx + 1}</span>
-
-                <div class="set-inputs">
-                    {
-                        let is_cardio = is_cardio.clone();
-                        let is_bodyweight = is_bodyweight.clone();
-                        let weight_str = weight_str.clone();
-                        let reps_str = reps_str.clone();
-                        let on_weight_change = on_weight_change.clone();
-                        let on_reps_change = on_reps_change.clone();
-                        move || if is_cardio() {
-                            // cardio precedence: minutes @ RPE
-                            let reps_str = reps_str.clone();
-                            let on_reps_change = on_reps_change.clone();
-                            let weight_str = weight_str.clone();
-                            let on_weight_change = on_weight_change.clone();
-                            view! {
-                                <input
-                                    type="number"
-                                    inputmode="numeric"
-                                    step="1"
-                                    min="0"
-                                    class="set-num-input"
-                                    placeholder="min"
-                                    prop:value=reps_str
-                                    on:input=on_reps_change
-                                />
-                                <span class="set-x">"@"</span>
-                                <input
-                                    type="number"
-                                    inputmode="numeric"
-                                    step="1"
-                                    min="1"
-                                    max="10"
-                                    class="set-num-input"
-                                    placeholder="RPE"
-                                    prop:value=weight_str
-                                    on:input=on_weight_change
-                                />
-                            }.into_any()
-                        } else if is_bodyweight() {
-                            // Bodyweight: only reps. No weight input, no separator.
-                            // SetLog.weight stays at its default (0.0) and round-trips
-                            // through serde unchanged, so existing data is untouched.
-                            let reps_str = reps_str.clone();
-                            let on_reps_change = on_reps_change.clone();
-                            view! {
+            {move || {
+                let is_done_row = is_done_b.clone();
+                let is_done_btn = is_done_b.clone();
+                let toggle_done = toggle_done_b.clone();
+                if is_cardio_b() {
+                    let ex_id = ex_id_b.clone();
+                    let targets = zt_b.clone();
+                    view! {
+                        <div class="set-row set-row-zones" class:set-done=is_done_row>
+                            <span class="set-num">"Set " {set_idx + 1}</span>
+                            <div class="zone-grid">
+                                {(1u8..=5).map(|zone| {
+                                    // A prescribed target for this zone, if the coach set one.
+                                    let target_min = targets.iter().find(|zt| zt.zone == zone).map(|zt| zt.minutes);
+                                    let ex_id_z = ex_id.clone();
+                                    let read_actual = {
+                                        let ex_id = ex_id_z.clone();
+                                        move || -> String {
+                                            state.active_session.get()
+                                                .and_then(|s| s.exercise_logs.iter().find(|e| e.exercise_id == ex_id).cloned())
+                                                .and_then(|e| e.sets.get(set_idx).cloned())
+                                                .and_then(|s| s.zone_minutes)
+                                                .and_then(|zs| zs.into_iter().find(|z| z.zone == zone))
+                                                .map(|z| z.minutes.to_string())
+                                                .unwrap_or_default()
+                                        }
+                                    };
+                                    let on_input = {
+                                        let ex_id = ex_id_z.clone();
+                                        move |e: leptos::ev::Event| {
+                                            // Accept fractional minutes (Apple Health reports them).
+                                            let val: f32 = event_target_value(&e).parse().unwrap_or(0.0);
+                                            state.active_session.update(|opt| {
+                                                if let Some(s) = opt.as_mut() {
+                                                    if let Some(log) = s.exercise_logs.iter_mut().find(|l| l.exercise_id == ex_id) {
+                                                        if let Some(set) = log.sets.get_mut(set_idx) {
+                                                            let mut zm = set.zone_minutes.clone().unwrap_or_default();
+                                                            if let Some(existing) = zm.iter_mut().find(|z| z.zone == zone) {
+                                                                existing.minutes = val;
+                                                            } else {
+                                                                zm.push(crate::models::ZoneTarget { zone, minutes: val });
+                                                            }
+                                                            set.zone_minutes = Some(zm);
+                                                        }
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    };
+                                    view! {
+                                        <div class="zone-row">
+                                            <span class="zone-label">"Z" {zone}</span>
+                                            <input
+                                                type="number"
+                                                inputmode="numeric"
+                                                step="1"
+                                                min="0"
+                                                class="set-num-input zone-input"
+                                                placeholder="min"
+                                                prop:value=read_actual
+                                                on:input=on_input
+                                            />
+                                            {target_min.map(|m| view! { <span class="zone-target">"/ " {m} " min"</span> })}
+                                        </div>
+                                    }
+                                }).collect_view()}
+                            </div>
+                            <button class="set-done-btn" class:done=is_done_btn on:click=toggle_done>"✓"</button>
+                        </div>
+                    }.into_any()
+                } else if is_bw_b() {
+                    // Bodyweight: only reps. No weight input, no separator.
+                    let reps_str = reps_str.clone();
+                    let on_reps_change = on_reps_change.clone();
+                    view! {
+                        <div class="set-row" class:set-done=is_done_row>
+                            <span class="set-num">"Set " {set_idx + 1}</span>
+                            <div class="set-inputs">
                                 <input
                                     type="number"
                                     inputmode="numeric"
@@ -680,15 +647,20 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                                     prop:value=reps_str
                                     on:input=on_reps_change
                                 />
-                            }.into_any()
-                        } else {
-                            // Standard: weight × reps. type="text" + inputmode="decimal"
-                            // preserves trailing "." during typing on mobile.
-                            let weight_str = weight_str.clone();
-                            let on_weight_change = on_weight_change.clone();
-                            let reps_str = reps_str.clone();
-                            let on_reps_change = on_reps_change.clone();
-                            view! {
+                            </div>
+                            <button class="set-done-btn" class:done=is_done_btn on:click=toggle_done>"✓"</button>
+                        </div>
+                    }.into_any()
+                } else {
+                    // Standard: weight × reps.
+                    let weight_str = weight_str.clone();
+                    let on_weight_change = on_weight_change.clone();
+                    let reps_str = reps_str.clone();
+                    let on_reps_change = on_reps_change.clone();
+                    view! {
+                        <div class="set-row" class:set-done=is_done_row>
+                            <span class="set-num">"Set " {set_idx + 1}</span>
+                            <div class="set-inputs">
                                 <input
                                     type="text"
                                     inputmode="decimal"
@@ -709,12 +681,12 @@ fn SetRow(ex_id: String, set_idx: usize) -> impl IntoView {
                                     prop:value=reps_str
                                     on:input=on_reps_change
                                 />
-                            }.into_any()
-                        }
-                    }
-                </div>
-                <button class="set-done-btn" class:done=is_done2 on:click=toggle_done>"✓"</button>
-            </div>
+                            </div>
+                            <button class="set-done-btn" class:done=is_done_btn on:click=toggle_done>"✓"</button>
+                        </div>
+                    }.into_any()
+                }
+            }}
         }.into_any()
     }
 }
@@ -732,10 +704,13 @@ fn CardioActualsImport() -> impl IntoView {
     let response_text: RwSignal<String> = RwSignal::new(String::new());
     let status: RwSignal<Option<String>> = RwSignal::new(None);
 
-    let has_zone_targets = move || {
+    // Show the cardio import whenever the session has ANY cardio exercise —
+    // coach-prescribed or freeform — not just ones with a target_zones plan.
+    let has_any_cardio = move || {
+        let lib = state.library.get();
         state.active_session.get()
             .map(|s| s.exercise_logs.iter().any(|e|
-                e.target_zones.as_ref().is_some_and(|z| !z.is_empty())
+                crate::library::is_cardio_exercise(&e.exercise_id, &e.exercise_name, &lib)
             ))
             .unwrap_or(false)
     };
@@ -744,13 +719,14 @@ fn CardioActualsImport() -> impl IntoView {
     // If exactly one cardio exercise in this session has target_zones, embed
     // its library_id verbatim so Claude doesn't have to guess.
     let prompt_text = move || -> String {
-        let zone_exs: Vec<(String, String)> = state.active_session.get()
+        let lib = state.library.get();
+        let cardio_exs: Vec<(String, String)> = state.active_session.get()
             .map(|s| s.exercise_logs.iter()
-                .filter(|e| e.target_zones.as_ref().is_some_and(|z| !z.is_empty()))
+                .filter(|e| crate::library::is_cardio_exercise(&e.exercise_id, &e.exercise_name, &lib))
                 .map(|e| (e.exercise_id.clone(), e.exercise_name.clone()))
                 .collect())
             .unwrap_or_default();
-        let (id_token, name_hint) = match zone_exs.as_slice() {
+        let (id_token, name_hint) = match cardio_exs.as_slice() {
             [(id, name)] => (id.as_str(), format!(" The exercise is \"{name}\"; use that exact library_id.")),
             _ => ("<library_id>", String::new()),
         };
@@ -802,7 +778,10 @@ fn CardioActualsImport() -> impl IntoView {
                         false
                     });
                     let Some(log) = target else { return; };
-                    if log.target_zones.is_none() { return; }
+                    // Only write zone actuals onto a cardio exercise (prescribed
+                    // or freeform) — never onto a strength lift.
+                    let lib = state.library.get_untracked();
+                    if !crate::library::is_cardio_exercise(&log.exercise_id, &log.exercise_name, &lib) { return; }
                     if let Some(set) = log.sets.last_mut() {
                         set.zone_minutes = Some(actuals.zones.clone());
                         // RPE is optional — only overwrite if Claude provided one.
@@ -828,7 +807,7 @@ fn CardioActualsImport() -> impl IntoView {
     };
 
     view! {
-        {move || has_zone_targets().then(|| view! {
+        {move || has_any_cardio().then(|| view! {
             <div class="cardio-import-card">
                 <div class="ci-title">"Paste Apple Health cardio summary"</div>
                 <div class="ci-blurb">
