@@ -184,14 +184,37 @@ pub fn ExercisesView() -> impl IntoView {
                 notes: None,
             }));
         }
+        // Move the selected exercise to the TOP of the list — whether brand new
+        // OR already in history (the common case). Previously only a brand-new
+        // exercise was inserted; an already-logged one stayed at its
+        // popularity-sorted position deep in the list, so selecting it opened a
+        // card far down the page. (That's the bug this fixes.)
         exercise_names.update(|v| {
-            if !v.iter().any(|n| n == &name) {
-                v.insert(0, name.clone());
-            }
+            v.retain(|n| n != &name);
+            v.insert(0, name.clone());
         });
         open_ex.set(Some(name));
         query.set(String::new());
         show_picker.set(false);
+
+        // The picker has collapsed and the selected card is now the first
+        // `.ex-card`. Scroll it into view after the DOM updates so you can log
+        // sets immediately instead of scrolling down to hunt for it.
+        if let Some(window) = web_sys::window() {
+            let cb = wasm_bindgen::closure::Closure::once(move || {
+                if let Some(el) = web_sys::window()
+                    .and_then(|w| w.document())
+                    .and_then(|d| d.query_selector(".ex-card").ok().flatten())
+                {
+                    el.scroll_into_view();
+                }
+            });
+            let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                wasm_bindgen::JsCast::unchecked_ref::<js_sys::Function>(cb.as_ref()),
+                50,
+            );
+            cb.forget();
+        }
     };
 
     let filtered_library = move || -> Vec<LibraryExercise> {
