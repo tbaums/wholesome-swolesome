@@ -925,102 +925,114 @@ fn FreeformSetRow(
         )
     };
 
-    let is_done2 = is_done.clone();
+    let is_done_b = is_done.clone();
+    let toggle_done_b = toggle_done.clone();
 
     view! {
-        <div class="set-row" class:set-done=is_done>
-            <span class="set-num">"Set " {set_idx + 1}</span>
-            <div class="set-inputs">
-                {
-                    let is_cardio = is_cardio.clone();
-                    let is_bodyweight = is_bodyweight.clone();
-                    let weight_str = weight_str.clone();
-                    let reps_str = reps_str.clone();
-                    let on_weight_change = on_weight_change.clone();
-                    let on_reps_change = on_reps_change.clone();
-                    move || if is_cardio() {
-                        let reps_str = reps_str.clone();
-                        let on_reps_change = on_reps_change.clone();
-                        let weight_str = weight_str.clone();
-                        let on_weight_change = on_weight_change.clone();
-                        view! {
-                            <input
-                                type="number"
-                                inputmode="numeric"
-                                step="1"
-                                min="0"
-                                class="set-num-input"
-                                placeholder="min"
-                                prop:value=reps_str
-                                on:change=on_reps_change
-                            />
-                            <span class="set-x">"@"</span>
-                            <input
-                                type="number"
-                                inputmode="numeric"
-                                step="1"
-                                min="1"
-                                max="10"
-                                class="set-num-input"
-                                placeholder="RPE"
-                                prop:value=weight_str
-                                on:change=on_weight_change
-                            />
-                        }.into_any()
-                    } else if is_bodyweight() {
-                        // Bodyweight: only reps. weight stays at 0 in storage, schema unchanged.
-                        let reps_str = reps_str.clone();
-                        let on_reps_change = on_reps_change.clone();
-                        view! {
-                            <input
-                                type="number"
-                                inputmode="numeric"
-                                step="1"
-                                min="0"
-                                class="set-num-input"
-                                placeholder="reps"
-                                prop:value=reps_str
-                                on:change=on_reps_change
-                            />
-                        }.into_any()
-                    } else {
-                        let weight_str = weight_str.clone();
-                        let on_weight_change = on_weight_change.clone();
-                        let reps_str = reps_str.clone();
-                        let on_reps_change = on_reps_change.clone();
-                        view! {
-                            <input
-                                type="number"
-                                inputmode="decimal"
-                                step="any"
-                                min="0"
-                                class="set-num-input"
-                                placeholder="wt"
-                                prop:value=weight_str
-                                on:change=on_weight_change
-                            />
+        {move || {
+            let is_done_row = is_done_b.clone();
+            let is_done_btn = is_done_b.clone();
+            let toggle_done = toggle_done_b.clone();
+            if is_cardio() {
+                // Cardio: per-zone (Z1-Z5) heart-rate minutes, mirroring the
+                // session view. Each zone writes into the freeform entry's
+                // set.zone_minutes (the same set the screenshot import writes to);
+                // the set's total minutes (reps) stays in sync so the legacy
+                // "X min" display and the import agree. Freeform has no coach
+                // prescription, so all five zones start blank.
+                let exercise_name = exercise_name.clone();
+                let exercise_id = exercise_id.clone();
+                view! {
+                    <div class="set-row set-row-zones" class:set-done=is_done_row>
+                        <span class="set-num">"Set " {set_idx + 1}</span>
+                        <div class="zone-grid">
+                            {(1u8..=5).map(|zone| {
+                                let ex_name_r = exercise_name.clone();
+                                let ex_id_r = exercise_id.clone();
+                                let read_zone = {
+                                    let exercise_name = ex_name_r.clone();
+                                    move || -> String {
+                                        let active_date = selected_date.get();
+                                        state.history.get().iter()
+                                            .find(|e| e.exercise_name == exercise_name && e.day_name.is_none() && e.date == active_date && !e.finalized)
+                                            .and_then(|e| e.sets.get(set_idx).cloned())
+                                            .and_then(|s| s.zone_minutes)
+                                            .and_then(|zs| zs.into_iter().find(|z| z.zone == zone))
+                                            .map(|z| z.minutes.to_string())
+                                            .unwrap_or_default()
+                                    }
+                                };
+                                let on_zone_input = {
+                                    let exercise_name = ex_name_r.clone();
+                                    let exercise_id = ex_id_r.clone();
+                                    move |e: leptos::ev::Event| {
+                                        let val: f32 = event_target_value(&e).parse().unwrap_or(0.0);
+                                        let active_date = selected_date.get_untracked();
+                                        state.history.update(|h| {
+                                            let idx = get_or_create_freeform(h, &exercise_name, &exercise_id, target_sets, reps_min, reps_max, &active_date);
+                                            if let Some(set) = h[idx].sets.get_mut(set_idx) {
+                                                let mut zm = set.zone_minutes.clone().unwrap_or_default();
+                                                if let Some(existing) = zm.iter_mut().find(|z| z.zone == zone) {
+                                                    existing.minutes = val;
+                                                } else {
+                                                    zm.push(crate::models::ZoneTarget { zone, minutes: val });
+                                                }
+                                                let total: f32 = zm.iter().map(|z| z.minutes).sum();
+                                                set.zone_minutes = Some(zm);
+                                                set.reps = total.round() as u32;
+                                            }
+                                        });
+                                    }
+                                };
+                                view! {
+                                    <div class="zone-row">
+                                        <span class="zone-label">"Z" {zone}</span>
+                                        <input
+                                            type="number"
+                                            inputmode="numeric"
+                                            step="1"
+                                            min="0"
+                                            class="set-num-input zone-input"
+                                            placeholder="min"
+                                            prop:value=read_zone
+                                            on:input=on_zone_input
+                                        />
+                                    </div>
+                                }
+                            }).collect_view()}
+                        </div>
+                        <button class="set-done-btn" class:done=is_done_btn on:click=toggle_done>"✓"</button>
+                    </div>
+                }.into_any()
+            } else if is_bodyweight() {
+                let reps_str = reps_str.clone();
+                let on_reps_change = on_reps_change.clone();
+                view! {
+                    <div class="set-row" class:set-done=is_done_row>
+                        <span class="set-num">"Set " {set_idx + 1}</span>
+                        <div class="set-inputs">
+                            <input type="number" inputmode="numeric" step="1" min="0" class="set-num-input" placeholder="reps" prop:value=reps_str on:change=on_reps_change/>
+                        </div>
+                        <button class="set-done-btn" class:done=is_done_btn on:click=toggle_done>"✓"</button>
+                    </div>
+                }.into_any()
+            } else {
+                let weight_str = weight_str.clone();
+                let on_weight_change = on_weight_change.clone();
+                let reps_str = reps_str.clone();
+                let on_reps_change = on_reps_change.clone();
+                view! {
+                    <div class="set-row" class:set-done=is_done_row>
+                        <span class="set-num">"Set " {set_idx + 1}</span>
+                        <div class="set-inputs">
+                            <input type="number" inputmode="decimal" step="any" min="0" class="set-num-input" placeholder="wt" prop:value=weight_str on:change=on_weight_change/>
                             <span class="set-x">"×"</span>
-                            <input
-                                type="number"
-                                inputmode="numeric"
-                                step="1"
-                                min="0"
-                                class="set-num-input"
-                                placeholder="reps"
-                                prop:value=reps_str
-                                on:change=on_reps_change
-                            />
-                        }.into_any()
-                    }
-                }
-            </div>
-            <button
-                class="set-done-btn"
-                class:done=is_done2
-                on:click=toggle_done
-            >
-                "✓"
-            </button>
-        </div>
+                            <input type="number" inputmode="numeric" step="1" min="0" class="set-num-input" placeholder="reps" prop:value=reps_str on:change=on_reps_change/>
+                        </div>
+                        <button class="set-done-btn" class:done=is_done_btn on:click=toggle_done>"✓"</button>
+                    </div>
+                }.into_any()
+            }
+        }}
     }
 }
