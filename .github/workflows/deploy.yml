@@ -1,8 +1,11 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches: [main]
+  # Production deploys off published releases, not every push to main.
+  # Merging to main is staging; publishing a release promotes to prod.
+  release:
+    types: [published]
+  # Manual redeploy / roll back to a prior tag (see RELEASING.md).
   workflow_dispatch:
 
 permissions:
@@ -18,7 +21,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the released tag
+        uses: actions/checkout@v4
+        with:
+          # On a release event this is the release's tag, so we build exactly
+          # the released commit. On workflow_dispatch tag_name is empty, and
+          # actions/checkout treats an empty ref as the default (the branch the
+          # run was dispatched from, normally main).
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
