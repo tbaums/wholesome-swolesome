@@ -10,8 +10,26 @@ This directory holds the agent that generates your next workout based on:
 
 | File | Purpose |
 |---|---|
-| `PROMPT.md` | The Claude agent prompt — the contract for "given state + library, plan a workout". |
-| `coach.sh`  | Bash wrapper that pulls state, calls `claude`, parses the JSON, and pushes back via `gh`. |
+| `PROMPT.md` | The Claude agent prompt — the contract for "given state + library, plan a workout". Prefers the shared generator; keeps a manual-derivation fallback. |
+| `coach.sh`  | Bash wrapper that pulls state, builds the brief via the shared generator, calls `claude`, parses the JSON, and pushes back via `gh`. |
+
+## Single source of truth: the `coach-brief` generator
+
+The coaching logic (per-muscle recovery, recent-training rundown, planned-vs-done
+handling, rep ranges, cardio-zone encoding, response format) lives in **one place**:
+`coach::build_coach_packet`. The native binary `src/bin/coach-brief.rs` exposes it
+to non-WASM callers and emits a brief **byte-identical** to the in-app Coach Brief:
+
+```bash
+cargo build --release --bin coach-brief
+target/release/coach-brief state.json exercises.json <today> <target-date>
+```
+
+Both nightly entry points consume it, so the logic never has to be kept in sync by hand:
+- **`coach.sh`** builds and runs the binary directly (see the script).
+- **The PROMPT.md agent** clones this repo and runs the binary when a Rust toolchain
+  is available, falling back to the manual derivation in `PROMPT.md` Steps 3–4 only
+  when it isn't. (#38)
 
 ## Manual run
 

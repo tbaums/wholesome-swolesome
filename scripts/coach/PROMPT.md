@@ -10,11 +10,44 @@ to the data repo so it appears in the app when the user opens it at the gym.
 1. **Read user state** from the data repo (a `state.json` file).
 2. **Read the exercise library** (`exercises.json` in the app repo).
 3. **Compute tomorrow's date** (the date the user will be opening the app at the gym).
-4. **Plan one workout** for that date, applying the rules below.
+4. **Plan one workout** for that date — preferably from the shared generator's brief (see the next section), otherwise by the fallback rules below.
 5. **Write the workout back** into `state.json`, overwriting any existing scheduled workout for that date.
 6. **Commit and push** with a message like `coach: plan workout for YYYY-MM-DD`.
 
 You have `gh` CLI auth as the user. Do everything with `gh api` calls and `git` commands.
+
+## Two ways to build the brief — prefer the shared generator
+
+The recovery analysis and planning rules in **Steps 3–4** are *also* produced by a
+native binary, `coach-brief`, that calls the exact same `coach::build_coach_packet`
+the in-app Coach Brief and `scripts/coach/coach.sh` use. Prefer it: the coaching
+logic then lives in **one place** (the point of #38) and you plan from a brief that
+is **byte-identical** to what the user sees in the app — no hand-kept drift.
+
+**Preferred path (a Rust toolchain / `cargo` is available).** Do Steps 1–2 (fetch
+`state.json` + `exercises.json`), then build & run the generator and plan from its
+output:
+
+```bash
+git clone --depth 1 "https://github.com/$WS_APP_REPO" /tmp/ws-app
+( cd /tmp/ws-app && cargo build --release --bin coach-brief )   # ~30s cold, cached after
+TODAY="$(date +%Y-%m-%d)"
+/tmp/ws-app/target/release/coach-brief \
+  /tmp/state.json /tmp/exercises.json "$TODAY" "$WS_TARGET_DATE" > /tmp/brief.md
+```
+
+`/tmp/brief.md` is a **complete prompt** — it already contains the muscle- and
+mobility-recovery tables, the recent-training rundown (completed sets only, plan
+titles omitted), the full planning task (progressive overload, recovery science,
+volume/rep ranges, equipment, stretching/balance/cardio encodings, ordering), and
+the exact JSON response format. **Read it, produce the workout JSON it specifies,
+then skip straight to Step 5 (Write the workout).** Do **not** also run Steps 3–4 —
+that re-derives what the brief already computed, which is the drift this removes.
+
+**Fallback path (no `cargo`, or the build/clone fails).** Derive the brief yourself
+via Steps 3–4 below. They are kept in sync with the generator **by hand**, so if you
+ever change planning logic here, change `coach::build_coach_packet` too (and vice
+versa) — that hand-sync is exactly what the preferred path exists to avoid.
 
 ## Inputs
 
@@ -77,7 +110,11 @@ Each library entry has `id`, `name`, `primaryMuscles`, `secondaryMuscles`, `equi
 `category` (strength|cardio|plyometrics|stretching), `level`, `mechanic`, `instructions`,
 `images`.
 
-## Step 3 — Reason about recovery
+## Step 3 — Reason about recovery (fallback path only)
+
+> _Skip this and Step 4 if you took the preferred path above — the generated
+> `/tmp/brief.md` already contains this analysis. Do them only when `coach-brief`
+> wasn't available._
 
 > **Completed sets are the ground truth — never the session title.** Each `ExerciseEntry`
 > carries a `day_name` (and the day may have a planned title): that is the *prescribed plan*,
@@ -105,7 +142,10 @@ Compute days since last hit. Bucket:
 - `8-14 days` → underworked, prioritize
 - `15+ / never` → neglected, definitely include
 
-## Step 4 — Plan the workout
+## Step 4 — Plan the workout (fallback path only)
+
+_Same note as Step 3: the generated brief already encodes these rules; only apply
+them by hand when you couldn't run `coach-brief`._
 
 Apply these rules:
 
