@@ -73,10 +73,22 @@ fn apply_cardio_actuals_to_freeform(
     selected_date: &str,
     actuals: &CardioActuals,
 ) -> u32 {
-    let i = get_or_create_freeform(
-        h, exercise_name, exercise_id,
-        target_sets, reps_min, reps_max, selected_date,
-    );
+    // Upsert on (exercise_name, freeform, selected_date) INCLUDING already-
+    // finalized entries. A prior import finalizes the entry (see the bottom of
+    // this fn), and `get_or_create_freeform` only matches non-finalized drafts —
+    // so a re-import for the same exercise+date would miss the finalized entry
+    // and append a DUPLICATE (#39). Match finalized entries too, and only fall
+    // back to creating a fresh draft when no freeform entry for this
+    // exercise+date exists at all. Result: re-import corrects in place.
+    let i = match h.iter().position(|e| {
+        e.exercise_name == exercise_name && e.day_name.is_none() && e.date == selected_date
+    }) {
+        Some(i) => i,
+        None => get_or_create_freeform(
+            h, exercise_name, exercise_id,
+            target_sets, reps_min, reps_max, selected_date,
+        ),
+    };
     // Sum as f32 (Apple Health zone times are fractional). Round once at the
     // end to seed set.reps (still u32 for the legacy cardio display path).
     let total_minutes_f: f32 = actuals.zones.iter().map(|z| z.minutes).sum();
@@ -1034,5 +1046,95 @@ fn FreeformSetRow(
                 }.into_any()
             }
         }}
+    }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod freeform_import_tests {
+    use super::*;
+    // The crate configures run_in_browser once in lib.rs; here we only need the
+    // attribute macro. get_or_create_freeform touches js_sys::Date + uuid("js"),
+    // so these must run in the browser harness (wasm-pack), not native.
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    fn actuals(zones: &[(u8, f32)], rpe: Option<f32>) -> CardioActuals {
+        CardioActuals {
+            exercise_id: Some("Elliptical_Trainer".into()),
+            exercise_name: None,
+            zones: zones
+                .iter()
+                .map(|(z, m)| crate::models::ZoneTarget { zone: *z, minutes: *m })
+                .collect(),
+            estimated_rpe: rpe,
+        }
+    }
+
+    // AC 1: one screenshot import with no existing entry → exactly one cardio
+    // entry carrying the parsed zone minutes, marked completed + finalized.
+    #[wasm_bindgen_test]
+    fn import_with_no_existing_entry_creates_exactly_one() {
+        let mut h: Vec<ExerciseEntry> = Vec::new();
+        let total = apply_cardio_actuals_to_freeform(
+            &mut h, "Elliptical Trainer", "Elliptical_Trainer", 1, 8, 12,
+            "2026-06-10", &actuals(&[(1, 5.0), (2, 18.0), (3, 9.0), (4, 3.0)], Some(6.0)),
+        );
+        assert_eq!(total, 35);
+        assert_eq!(h.len(), 1);
+        let e = &h[0];
+        assert_eq!(e.date, "2026-06-10");
+        assert!(e.finalized);
+        let last = e.sets.last().unwrap();
+        assert_eq!(last.reps, 35);
+        assert!(last.completed);
+        assert_eq!(last.completed_date.as_deref(), Some("2026-06-10"));
+        assert_eq!(last.zone_minutes.as_ref().unwrap().len(), 4);
+        assert_eq!(last.weight, 6.0);
+    }
+
+    // AC 2 + the #39 regression: re-importing (e.g. a corrected screenshot) for
+    // the same exercise+date must UPDATE the entry in place, never append a
+    // duplicate — even though the first import finalized it.
+    #[wasm_bindgen_test]
+    fn reimport_same_exercise_and_date_updates_in_place_no_duplicate() {
+        let mut h: Vec<ExerciseEntry> = Vec::new();
+        apply_cardio_actuals_to_freeform(
+            &mut h, "Elliptical Trainer", "Elliptical_Trainer", 1, 8, 12,
+            "2026-06-10", &actuals(&[(2, 20.0)], Some(5.0)),
+        );
+        assert_eq!(h.len(), 1);
+        // The first import finalizes the entry — this is exactly the state that
+        // used to make get_or_create_freeform miss it and create a duplicate.
+        assert!(h[0].finalized);
+
+        let total = apply_cardio_actuals_to_freeform(
+            &mut h, "Elliptical Trainer", "Elliptical_Trainer", 1, 8, 12,
+            "2026-06-10", &actuals(&[(2, 25.0), (3, 5.0)], Some(6.0)),
+        );
+        assert_eq!(total, 30);
+        assert_eq!(h.len(), 1, "re-import must update in place, not append a duplicate");
+        let last = h[0].sets.last().unwrap();
+        assert_eq!(last.reps, 30);
+        assert_eq!(last.zone_minutes.as_ref().unwrap().len(), 2);
+        assert_eq!(last.weight, 6.0);
+    }
+
+    // Guard the other direction: a different date is a different session and
+    // must get its own entry (the upsert keys on exercise_name + date).
+    #[wasm_bindgen_test]
+    fn import_for_a_different_date_creates_a_separate_entry() {
+        let mut h: Vec<ExerciseEntry> = Vec::new();
+        apply_cardio_actuals_to_freeform(
+            &mut h, "Elliptical Trainer", "Elliptical_Trainer", 1, 8, 12,
+            "2026-06-10", &actuals(&[(2, 20.0)], None),
+        );
+        apply_cardio_actuals_to_freeform(
+            &mut h, "Elliptical Trainer", "Elliptical_Trainer", 1, 8, 12,
+            "2026-06-11", &actuals(&[(2, 22.0)], None),
+        );
+        assert_eq!(h.len(), 2);
+        assert_eq!(h[0].date, "2026-06-10");
+        assert_eq!(h[1].date, "2026-06-11");
     }
 }

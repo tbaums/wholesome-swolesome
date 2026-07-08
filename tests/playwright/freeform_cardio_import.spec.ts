@@ -297,4 +297,59 @@ test.describe('Freeform cardio: Apple Health zone-import flow', () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].finalized).toBe(true);
   });
+
+  test('re-importing for the same exercise+date updates in place — no duplicate (#39)', async ({ page }) => {
+    // Regression: the first import finalizes the entry, and the upsert used to
+    // match only non-finalized drafts — so a second import (e.g. a corrected
+    // screenshot) appended a DUPLICATE instead of updating in place.
+    await addCardioExercise(page, 'elliptical', 'Elliptical Trainer');
+    const importCard = page
+      .locator('.ex-card')
+      .filter({ hasText: 'Elliptical Trainer' })
+      .locator('.cardio-import-card');
+
+    const first = JSON.stringify({
+      cardio_actuals: {
+        exercise_id: 'Elliptical_Trainer',
+        zones: [{ zone: 2, minutes: 20 }],
+        estimated_rpe: 5,
+      },
+    });
+    await importCard.locator('textarea').fill(first);
+    await importCard.locator('button').filter({ hasText: 'Import zone minutes' }).click();
+    await expect(importCard.locator('text=/20 min imported across 1 zone\\(s\\)/')).toBeVisible();
+
+    let entries = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('ws_ex_history') ?? '[]'),
+    );
+    expect(entries).toHaveLength(1);
+
+    // Second import: corrected screenshot for the SAME exercise + date.
+    const second = JSON.stringify({
+      cardio_actuals: {
+        exercise_id: 'Elliptical_Trainer',
+        zones: [{ zone: 2, minutes: 25 }, { zone: 3, minutes: 5 }],
+        estimated_rpe: 6,
+      },
+    });
+    await importCard.locator('textarea').fill(second);
+    await importCard.locator('button').filter({ hasText: 'Import zone minutes' }).click();
+    await expect(importCard.locator('text=/30 min imported across 2 zone\\(s\\)/')).toBeVisible();
+
+    entries = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('ws_ex_history') ?? '[]'),
+    );
+    // Still exactly ONE entry — updated in place, not duplicated.
+    expect(entries).toHaveLength(1);
+    const e = entries[0];
+    expect(e.date).toBe(TODAY);
+    expect(e.finalized).toBe(true);
+    const last = e.sets[e.sets.length - 1];
+    expect(last.reps).toBe(30);
+    expect(last.zone_minutes).toEqual([
+      { zone: 2, minutes: 25 },
+      { zone: 3, minutes: 5 },
+    ]);
+    expect(last.weight).toBe(6);
+  });
 });
