@@ -746,6 +746,73 @@
       background-clip: text;
     }
 
+    /* ── Full-screen note editor ── */
+    /* Tappable preview that stands in for a large free-text field. Looks like
+       an input, clamps to ~3 lines, opens the full-screen editor on tap. */
+    .note-preview {
+      width: 100%;
+      min-height: 44px;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      cursor: pointer;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .note-preview.is-empty { color: var(--text-muted); }
+
+    /* Top-anchored full-viewport editing surface. Top-anchored + 100dvh keeps
+       the caret above the iOS keyboard; z-index sits above nav (100) + toast
+       (300); 16px font avoids iOS focus auto-zoom (global inputs are 14px). */
+    .note-editor {
+      position: fixed;
+      inset: 0;
+      z-index: 400;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding-top: env(safe-area-inset-top);
+    }
+    .note-editor-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .note-editor-title {
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text);
+    }
+    .note-editor-area {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      resize: none;
+      border: 0;
+      border-radius: 0;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1.5;
+      padding: 16px;
+      padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
+    }
+    .note-editor-area:focus {
+      border: 0;
+      box-shadow: none;
+    }
+
     /* ── Toast ── */
     .toast {
       position: fixed;

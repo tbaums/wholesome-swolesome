@@ -347,6 +347,28 @@ pub fn OptionsView() -> impl IntoView {
 
 // ── Goals editor ─────────────────────────────────────────────────────────────
 
+/// Which large free-text goal field the full-screen editor is editing.
+#[derive(Clone, Copy, PartialEq)]
+enum NoteField {
+    Avoid,
+    Notes,
+}
+
+impl NoteField {
+    fn title(self) -> &'static str {
+        match self {
+            NoteField::Avoid => "Injuries / lifts to avoid",
+            NoteField::Notes => "Notes for the coach",
+        }
+    }
+    fn placeholder(self) -> &'static str {
+        match self {
+            NoteField::Avoid => "e.g. left shoulder impingement; no overhead press",
+            NoteField::Notes => "e.g. prefer compound lifts; bias glutes; warm-up included separately",
+        }
+    }
+}
+
 #[component]
 fn GoalsEditor() -> impl IntoView {
     let state = expect_context::<AppState>();
@@ -356,8 +378,49 @@ fn GoalsEditor() -> impl IntoView {
     };
     let set_sessions = move |v: u32| state.goals.update(|x| x.sessions_per_week = v);
     let set_minutes = move |v: u32| state.goals.update(|x| x.session_minutes = v);
-    let set_avoid = move |s: String| state.goals.update(|x| x.avoid = s);
-    let set_notes = move |s: String| state.goals.update(|x| x.notes = s);
+
+    // Full-screen note editor: tap a preview card to open a top-anchored
+    // overlay that edits a local `draft`; Done commits, Cancel discards. The
+    // commit writes back to `goals`, which the existing localStorage + push
+    // effects persist automatically (no new save plumbing).
+    let editing: RwSignal<Option<NoteField>> = RwSignal::new(None);
+    let draft = RwSignal::new(String::new());
+
+    let open_editor = move |field: NoteField| {
+        let current = match field {
+            NoteField::Avoid => state.goals.get_untracked().avoid,
+            NoteField::Notes => state.goals.get_untracked().notes,
+        };
+        draft.set(current);
+        editing.set(Some(field));
+
+        // Focus the textarea once it mounts so the keyboard opens immediately.
+        // Same set_timeout + query_selector idiom used in exercises.rs.
+        if let Some(window) = web_sys::window() {
+            let cb = wasm_bindgen::closure::Closure::once(move || {
+                if let Some(el) = web_sys::window()
+                    .and_then(|w| w.document())
+                    .and_then(|d| d.query_selector(".note-editor-area").ok().flatten())
+                {
+                    let _ = el.unchecked_into::<web_sys::HtmlElement>().focus();
+                }
+            });
+            let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                wasm_bindgen::JsCast::unchecked_ref::<js_sys::Function>(cb.as_ref()),
+                50,
+            );
+            cb.forget();
+        }
+    };
+
+    let commit = move |field: NoteField| {
+        let text = draft.get_untracked();
+        state.goals.update(|g| match field {
+            NoteField::Avoid => g.avoid = text,
+            NoteField::Notes => g.notes = text,
+        });
+        editing.set(None);
+    };
 
     let toggle_equipment = move |eq: String| {
         state.goals.update(|x| {
@@ -434,24 +497,60 @@ fn GoalsEditor() -> impl IntoView {
             </div>
 
             <label class="text-sm text-muted">"Injuries / lifts to avoid"</label>
-            <textarea
-                class="input"
-                rows="2"
+            <div
+                class="note-preview"
+                class=("is-empty", move || state.goals.get().avoid.trim().is_empty())
                 style="margin-bottom:10px"
-                placeholder="e.g. left shoulder impingement; no overhead press"
-                prop:value=move || state.goals.get().avoid.clone()
-                on:input=move |e| set_avoid(event_target_value(&e))
-            />
+                on:click=move |_| open_editor(NoteField::Avoid)
+            >
+                {move || {
+                    let v = state.goals.get().avoid;
+                    if v.trim().is_empty() {
+                        "Tap to add injuries / lifts to avoid…".to_string()
+                    } else {
+                        v
+                    }
+                }}
+            </div>
 
             <label class="text-sm text-muted">"Notes for the coach"</label>
-            <textarea
-                class="input"
-                rows="2"
-                placeholder="e.g. prefer compound lifts; bias glutes; warm-up included separately"
-                prop:value=move || state.goals.get().notes.clone()
-                on:input=move |e| set_notes(event_target_value(&e))
-            />
+            <div
+                class="note-preview"
+                class=("is-empty", move || state.goals.get().notes.trim().is_empty())
+                on:click=move |_| open_editor(NoteField::Notes)
+            >
+                {move || {
+                    let v = state.goals.get().notes;
+                    if v.trim().is_empty() {
+                        "Tap to add notes for the coach…".to_string()
+                    } else {
+                        v
+                    }
+                }}
+            </div>
         </div>
+
+        {move || editing.get().map(|field| view! {
+            <div class="note-editor">
+                <div class="note-editor-bar">
+                    <button
+                        class="btn btn-ghost"
+                        on:click=move |_| editing.set(None)
+                    >"Cancel"</button>
+                    <span class="note-editor-title">{field.title()}</span>
+                    <button
+                        class="btn btn-primary btn-sm"
+                        on:click=move |_| commit(field)
+                    >"Done"</button>
+                </div>
+                <textarea
+                    class="note-editor-area"
+                    placeholder=field.placeholder()
+                    prop:value=move || draft.get()
+                    on:input=move |e| draft.set(event_target_value(&e))
+                />
+            </div>
+        })}
     }
 }
 
