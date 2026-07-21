@@ -195,6 +195,47 @@ pub struct ZoneTarget {
     pub minutes: f32,
 }
 
+/// Canonical RPE (rate of perceived exertion, 1–10) derived from a logged
+/// per-zone-minutes distribution. This is the deterministic twin of the
+/// `estimated_rpe` the app asks Claude to infer on the Apple-Health import
+/// path: a minute-weighted average of per-zone anchors chosen to sit inside
+/// the documented zone→RPE bands (Z1 1–2, Z2 2–3, Z3 4–6, Z4 7–8, Z5 9–10).
+///
+/// Returns `None` when there is no positive-minutes, in-range (1–5) zone to
+/// score (empty, all-zero, negative/NaN/inf, or only out-of-range zones); how
+/// an unscorable zone set is presented is the caller's call (see
+/// [`SetLog::effective_rpe`]). See #51: the manual zone-grid entry path never
+/// wrote an RPE, so `SetLog.weight` was a stale carry-forward for zone cardio —
+/// this makes the logged zones authoritative.
+pub fn rpe_from_zone_minutes(zones: &[ZoneTarget]) -> Option<f32> {
+    fn anchor(zone: u8) -> Option<f32> {
+        match zone {
+            1 => Some(1.5),
+            2 => Some(2.5),
+            3 => Some(5.0),
+            4 => Some(7.5),
+            5 => Some(9.5),
+            _ => None, // out-of-range zone → skipped
+        }
+    }
+    let mut num = 0.0f32;
+    let mut denom = 0.0f32;
+    for z in zones {
+        // `is_finite()` rejects NaN and ±inf (a typed "inf"/"1e40" parses to
+        // +inf and would otherwise make num/denom = inf/inf = NaN); `> 0.0`
+        // then drops zero and negatives. Bad input → no contribution → None.
+        if z.minutes.is_finite() && z.minutes > 0.0 {
+            if let Some(a) = anchor(z.zone) {
+                num += a * z.minutes;
+                denom += z.minutes;
+            }
+        }
+    }
+    // Weighted average of in-[1.5,9.5] anchors is already in range; clamp is
+    // purely defensive.
+    (denom > 0.0).then(|| (num / denom).clamp(1.0, 10.0))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScheduledExercise {
     /// `LibraryExercise.id` from /data/exercises.json. None = freeform name only.
@@ -259,6 +300,28 @@ pub struct SetLog {
     /// populated for zone-shaped cardio sets; None for everything else.
     #[serde(default)]
     pub zone_minutes: Option<Vec<ZoneTarget>>,
+}
+
+impl SetLog {
+    /// The RPE (or, for strength sets, the weight) to display and report for
+    /// this set.
+    ///
+    /// For a zone-shaped cardio set — whenever `zone_minutes` is `Some` — the
+    /// stored `weight` is a stale carry-forward (#51) and is NEVER consulted:
+    /// the RPE comes from the logged zone distribution via
+    /// [`rpe_from_zone_minutes`]. A zone set with no scorable minutes
+    /// (empty/all-zero, e.g. the user cleared the inputs) has no logged
+    /// intensity, so it reads `0.0` — not the stale weight.
+    ///
+    /// Every non-zone set (`zone_minutes == None`) — all strength, plus cardio
+    /// logged as minutes+RPE — returns `weight` unchanged, so this is safe to
+    /// call on any set.
+    pub fn effective_rpe(&self) -> f32 {
+        match self.zone_minutes.as_deref() {
+            Some(zones) => rpe_from_zone_minutes(zones).unwrap_or(0.0),
+            None => self.weight,
+        }
+    }
 }
 
 // ── Flat exercise-entry history (unchanged) ───────────────────────────────────

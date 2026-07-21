@@ -180,7 +180,9 @@ pub fn SessionDetailView(session_id: String) -> impl IntoView {
                                             key=|s| s.set_number
                                             children=move |set| {
                                                 let (v1, v2) = if is_cardio {
-                                                    (set.reps.to_string(), format!("{:.0}", set.weight))
+                                                    // Intensity = RPE derived from the logged zones
+                                                    // (falls back to stored weight when no zones). #51.
+                                                    (set.reps.to_string(), format!("{:.0}", set.effective_rpe()))
                                                 } else {
                                                     (format!("{:.1}", set.weight), set.reps.to_string())
                                                 };

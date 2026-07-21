@@ -1553,6 +1553,133 @@ mod tests {
         assert_eq!(parsed.estimated_rpe, Some(7.5));
     }
 
+    // ── #51: RPE derived from the logged zone distribution ────────────────────
+    // The manual zone-grid entry path never wrote an RPE, so zone cardio
+    // showed a stale carried-forward `weight` (e.g. a constant 8) regardless of
+    // the zones logged. `rpe_from_zone_minutes` makes the zones authoritative.
+
+    use crate::models::{rpe_from_zone_minutes, SetLog, ZoneTarget};
+
+    fn zones(pairs: &[(u8, f32)]) -> Vec<ZoneTarget> {
+        pairs.iter().map(|&(zone, minutes)| ZoneTarget { zone, minutes }).collect()
+    }
+
+    #[wasm_bindgen_test]
+    fn rpe_single_zone_hits_its_anchor() {
+        // All-one-zone lands on that zone's anchor (inside its documented band).
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(1, 30.0)])), Some(1.5));
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(2, 30.0)])), Some(2.5));
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(3, 30.0)])), Some(5.0));
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(4, 30.0)])), Some(7.5));
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(5, 30.0)])), Some(9.5));
+    }
+
+    #[wasm_bindgen_test]
+    fn rpe_all_zone_1_is_light_not_eight() {
+        // The exact bug from #51: an all-Z1 session must read as easy, never 8.
+        let rpe = rpe_from_zone_minutes(&zones(&[(1, 45.0)])).unwrap();
+        assert_eq!(rpe, 1.5);
+        assert_eq!(format!("{rpe:.0}"), "2"); // displayed integer
+        assert!(rpe < 3.0, "all-Z1 must be light, got {rpe}");
+    }
+
+    #[wasm_bindgen_test]
+    fn rpe_minute_weighted_mix_is_monotonic_and_bounded() {
+        // 50/50 Z2/Z4 → exact midpoint of the two anchors.
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(2, 15.0), (4, 15.0)])), Some(5.0));
+        // Z1-heavy mix stays low; Z4/Z5 interval stays hard.
+        let easy = rpe_from_zone_minutes(&zones(&[(1, 25.0), (2, 5.0)])).unwrap();
+        let hard = rpe_from_zone_minutes(&zones(&[(4, 15.0), (5, 5.0)])).unwrap();
+        assert!(easy < 2.5 && hard >= 7.5, "easy={easy} hard={hard}");
+        // Shifting minutes into a harder zone never lowers RPE (monotonic).
+        let a = rpe_from_zone_minutes(&zones(&[(2, 20.0), (4, 10.0)])).unwrap();
+        let b = rpe_from_zone_minutes(&zones(&[(2, 10.0), (4, 20.0)])).unwrap();
+        assert!(b > a, "more Z4 must raise RPE: a={a} b={b}");
+    }
+
+    #[wasm_bindgen_test]
+    fn rpe_handles_fractional_minutes() {
+        // Apple Health reports fractional minutes; must aggregate cleanly.
+        let rpe = rpe_from_zone_minutes(&zones(&[(2, 17.85), (3, 2.15)])).unwrap();
+        assert!((rpe - 2.769).abs() < 0.01, "got {rpe}");
+    }
+
+    #[wasm_bindgen_test]
+    fn rpe_none_for_empty_zero_and_out_of_range() {
+        assert_eq!(rpe_from_zone_minutes(&[]), None);
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(1, 0.0), (2, 0.0)])), None);
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(7, 20.0)])), None); // only out-of-range
+    }
+
+    #[wasm_bindgen_test]
+    fn rpe_rejects_non_finite_minutes() {
+        // A typed "inf"/"1e40" parses to +inf; it must not yield Some(NaN).
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(4, f32::INFINITY)])), None);
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(2, f32::NAN)])), None);
+        // A finite zone alongside a non-finite one still scores from the finite.
+        assert_eq!(
+            rpe_from_zone_minutes(&zones(&[(4, 10.0), (5, f32::INFINITY)])),
+            Some(7.5)
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn rpe_skips_bad_entries_but_scores_the_rest() {
+        // Negative minutes and out-of-range zones are skipped; valid ones score.
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(4, 10.0), (2, -5.0)])), Some(7.5));
+        assert_eq!(rpe_from_zone_minutes(&zones(&[(4, 10.0), (7, 10.0)])), Some(7.5));
+    }
+
+    #[wasm_bindgen_test]
+    fn effective_rpe_prefers_zones_over_stale_weight() {
+        // A zone-cardio set with a stale carried-forward weight of 8 must
+        // report the zone-derived RPE, not 8 (the #51 fix at the read site).
+        let set = SetLog {
+            set_number: 1,
+            reps: 45,
+            weight: 8.0, // stale carry-forward
+            completed: true,
+            completed_date: None,
+            duration_seconds: None,
+            zone_minutes: Some(zones(&[(1, 45.0)])),
+        };
+        assert_eq!(set.effective_rpe(), 1.5, "zones must win over stale weight");
+    }
+
+    #[wasm_bindgen_test]
+    fn effective_rpe_zero_for_zone_set_with_no_logged_minutes() {
+        // A zone-shaped set whose minutes were cleared/zeroed must NOT fall
+        // back to the stale weight (#51 residual) — it reads 0, not 8.
+        let set = SetLog {
+            set_number: 1,
+            reps: 0,
+            weight: 8.0, // stale carry-forward
+            completed: true,
+            completed_date: None,
+            duration_seconds: None,
+            zone_minutes: Some(zones(&[(2, 0.0)])), // logged, but zeroed out
+        };
+        assert_eq!(set.effective_rpe(), 0.0, "zeroed zone set must not show stale weight");
+        // Empty zone vec: same — a zone marker with nothing in it.
+        let empty = SetLog { zone_minutes: Some(vec![]), ..set.clone() };
+        assert_eq!(empty.effective_rpe(), 0.0);
+    }
+
+    #[wasm_bindgen_test]
+    fn effective_rpe_falls_back_to_weight_without_zones() {
+        // Strength (and non-zone cardio) sets are untouched: weight stands.
+        let set = SetLog {
+            set_number: 1,
+            reps: 5,
+            weight: 225.0,
+            completed: true,
+            completed_date: None,
+            duration_seconds: None,
+            zone_minutes: None,
+        };
+        assert_eq!(set.effective_rpe(), 225.0);
+    }
+
     #[wasm_bindgen_test]
     fn coach_packet_surfaces_zone_breakdown_in_recent_training() {
         // When a freeform cardio set carries zone_minutes (typically from the

@@ -20,7 +20,9 @@ pub fn export_history_csv(history: &[ExerciseEntry]) -> String {
                 csv_field(&entry.exercise_name),
                 set.set_number,
                 set.reps,
-                set.weight,
+                // Cardio-with-zones exports the zone-derived RPE; strength and
+                // non-zone sets export stored weight unchanged (no zones). #51.
+                set.effective_rpe(),
                 dur,
                 set.completed,
             ));

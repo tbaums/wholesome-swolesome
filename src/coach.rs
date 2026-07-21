@@ -195,10 +195,12 @@ titles are intentionally omitted, since a plan can name work that was never done
                                 .collect::<Vec<_>>()
                                 .join(" ");
                             let total: f32 = zones.iter().map(|z| z.minutes).sum();
-                            let rpe_suffix = if s.weight > 0.0 {
-                                format!(" @ RPE {:.0}", s.weight)
-                            } else {
-                                String::new()
+                            // RPE derived from the logged zone distribution, so
+                            // the coach reads real intensity — not the stale
+                            // carried-forward `weight` these sets used to show. #51.
+                            let rpe_suffix = match crate::models::rpe_from_zone_minutes(zones) {
+                                Some(rpe) => format!(" @ RPE {:.0}", rpe),
+                                None => String::new(),
                             };
                             format!("{} ({:.0} min total){}", zone_str, total.round(), rpe_suffix)
                         } else if s.weight > 0.0 {
