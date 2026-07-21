@@ -31,6 +31,19 @@ npx playwright test --config=playwright.walkthrough.config.ts       # screenshot
 
 Important: when iterating on Playwright tests, trunk's live-reload will reload the page mid-test and break things. Both the standard and walkthrough configs pass `--no-autoreload` when they start trunk themselves; if you start trunk manually, do the same.
 
+## Changelog, docs & releasing
+
+- **Every user-facing change requires a `CHANGELOG.md` entry in the same PR**, in
+  the house format `- **Change** (#NN, code <sha>, docs <sha>) — …` (docs ref
+  mandatory; `docs none — internal` for changes with no user-facing surface).
+  Update `README.md` / `docs/` when behavior users rely on changes. Docs are
+  authored in the build cycle, not at release time.
+- **Versioning is semver** — PATCH for bug fixes, MINOR for features, MAJOR for
+  breaking changes. Don't default to a minor bump out of habit.
+- Releases: bump `.release-version` via PR to `main`; merging cuts the tag and
+  auto-deploys to Pages. Bump `public/sw.js`'s `CACHE` constant when shipping
+  asset (WASM/JS/CSS/HTML) changes. See `RELEASING.md` for the full runbook.
+
 ## Architecture
 
 ### Tech stack

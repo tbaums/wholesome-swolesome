@@ -6,9 +6,43 @@ is built and deployed from the release's tag — *not* from every commit on `mai
 - `main` is **staging**: CI (`ci.yml`) gates it, but merging to `main` no longer
   touches the live site.
 - Publishing a **release** is what promotes to **production**: `release.yml` cuts
-  the tag + GitHub Release, and `deploy.yml` (triggered on `release: published`)
-  checks out that exact tag, runs `trunk build --release`, and deploys `dist/` to
-  Pages.
+  the tag + GitHub Release, then **dispatches `deploy.yml` at that tag**, which
+  runs `trunk build --release` and deploys `dist/` to Pages.
+
+> **Why the explicit dispatch (not the `release: published` event):** a release
+> created by `release.yml` uses the default `GITHUB_TOKEN`, and GitHub suppresses
+> events raised by `GITHUB_TOKEN` from triggering further workflows (anti-
+> recursion). So the `release: published` event never starts `deploy.yml`.
+> `workflow_dispatch` is one of the two documented exceptions `GITHUB_TOKEN` may
+> trigger, so `release.yml` ends by running `gh workflow run deploy.yml --ref
+> <tag>`. (Before this was wired up, v0.4.0 and v0.5.0 were tagged but never
+> deployed until dispatched by hand — see #53.)
+
+## Versioning
+
+Tags are semver `vMAJOR.MINOR.PATCH`:
+
+- **PATCH** (`v0.5.0` → `v0.5.1`) — bug fixes with no new user-facing capability.
+- **MINOR** (`v0.5.1` → `v0.6.0`) — new features / user-facing capabilities.
+- **MAJOR** — breaking changes.
+
+Pick the bump from what actually changed, not by habit. (The 0.1.0–0.4.0 releases
+predate this rule and were all minor bumps; from 0.5.1 on, follow semver.)
+
+## Documentation (required, not optional)
+
+Every change that ships carries its documentation **in the same PR** — docs are
+authored in the build cycle, not bolted on at release time:
+
+- **`CHANGELOG.md` is mandatory.** Add an entry under the target version with the
+  house format `- **Change** (#NN, code <sha>, docs <sha>) — …`. Same sha when the
+  docs rode in the implementing commit; distinct when docs landed separately;
+  `docs none — internal` for changes with no user-facing surface. The **docs ref
+  is mandatory** — a change is not "done" until its docs are in.
+- Update `README.md` / `docs/` whenever behavior a user relies on changes.
+- A release must not introduce a user-facing change that has no CHANGELOG entry.
+
+This matches the transom repo's documentation strictness.
 
 ## Cut a release (promote main to production)
 

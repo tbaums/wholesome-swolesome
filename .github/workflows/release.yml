@@ -24,6 +24,7 @@ on:
 
 permissions:
   contents: write
+  actions: write   # required to dispatch deploy.yml (workflow_dispatch API)
 
 jobs:
   release:
@@ -31,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create tag + GitHub release
+      - name: Create tag + GitHub release, then deploy it
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -47,3 +48,13 @@ jobs:
             --target "${{ github.sha }}" \
             --title "$TAG" \
             --generate-notes
+          # Deploy the release to Pages. The `release: published` event above
+          # does NOT trigger deploy.yml, because events raised by GITHUB_TOKEN
+          # are suppressed to prevent workflow recursion — so a release-created
+          # tag would otherwise sit undeployed (this bit v0.4.0 and v0.5.0).
+          # `workflow_dispatch` is one of the two documented exceptions
+          # GITHUB_TOKEN *is* allowed to trigger, so we dispatch deploy.yml at
+          # the new tag explicitly. deploy.yml checks out the dispatch ref, so
+          # `--ref "$TAG"` builds exactly the released commit.
+          echo "Dispatching deploy.yml for $TAG"
+          gh workflow run deploy.yml --ref "$TAG"
