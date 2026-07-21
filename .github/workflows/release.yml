@@ -53,8 +53,13 @@ jobs:
           # are suppressed to prevent workflow recursion — so a release-created
           # tag would otherwise sit undeployed (this bit v0.4.0 and v0.5.0).
           # `workflow_dispatch` is one of the two documented exceptions
-          # GITHUB_TOKEN *is* allowed to trigger, so we dispatch deploy.yml at
-          # the new tag explicitly. deploy.yml checks out the dispatch ref, so
-          # `--ref "$TAG"` builds exactly the released commit.
-          echo "Dispatching deploy.yml for $TAG"
-          gh workflow run deploy.yml --ref "$TAG"
+          # GITHUB_TOKEN *is* allowed to trigger, so we dispatch deploy.yml.
+          #
+          # Dispatch at `main`, NOT the tag: the github-pages environment's
+          # deployment-branch policy only allows `main`, so a tag-ref deploy is
+          # rejected (surfaces as `BlobNotFound`). This runs on the same commit
+          # anyway — release.yml just tagged `github.sha`, which is main's tip —
+          # so `main` deploys exactly the released code. (deploy.yml is likewise
+          # designed for workflow_dispatch to build main.)
+          echo "Dispatching deploy.yml (main = the just-tagged $TAG commit)"
+          gh workflow run deploy.yml --ref main
