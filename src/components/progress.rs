@@ -13,7 +13,7 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
         let exercise_name = exercise_name.clone();
         move || {
             let history = state.history.get();
-            let mut rows: Vec<(String, String, u32, f32, bool)> = Vec::new(); // (date, _tag, reps, weight, completed)
+            let mut rows: Vec<(String, String, u32, f32, bool)> = Vec::new(); // (date, _tag, reps, weight-or-RPE, completed)
             for entry in &history {
                 if entry.exercise_name == exercise_name {
                     for set in &entry.sets {
@@ -21,7 +21,10 @@ pub fn ProgressView(exercise_name: String) -> impl IntoView {
                             entry.date.clone(),
                             entry.day_name.clone().unwrap_or_else(|| "Freeform".to_string()),
                             set.reps,
-                            set.weight,
+                            // Cardio Intensity + "personal best" read this field; use the
+                            // zone-derived RPE so this view matches History (#51). Strength
+                            // sets have no zones, so effective_rpe() == weight (unchanged).
+                            set.effective_rpe(),
                             set.completed,
                         ));
                     }
