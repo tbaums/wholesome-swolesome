@@ -15,6 +15,11 @@ build cycle, not at release time.
 no new user-facing capability, **MINOR** for new features/capabilities, **MAJOR**
 for breaking changes. See `RELEASING.md`.
 
+## [Unreleased]
+
+### Fixed
+- **Auto-deploy dispatches `main`, not the release tag** (#53, code this change, docs none — internal) — the `github-pages` environment's deployment-branch policy only permits `main`, so dispatching `deploy.yml` at the tag was rejected (`BlobNotFound`); v0.5.1's first auto-deploy attempt hit this. `release.yml` now dispatches `main`, which is the just-tagged commit, so the release still deploys exactly its own code. Rolls into the next release.
+
 ## [0.5.1] — 2026-07-21
 
 ### Fixed
