@@ -12,7 +12,7 @@ concurrency:
 jobs:
   lint-and-unit:
     name: Clippy + WASM unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -61,7 +61,7 @@ jobs:
 
   e2e:
     name: Playwright E2E (WebKit / iPhone 15)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
