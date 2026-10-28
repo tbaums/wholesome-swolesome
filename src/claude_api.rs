@@ -21,6 +21,10 @@ const API_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
 /// The model every call uses. One constant so the three call sites can't drift.
+///
+/// The id is the one issue #59 specified. Nothing here validates it: every test
+/// mocks `api.anthropic.com` and CI has no key, so the operator smoke test in
+/// AC6 is the gate on it being right.
 pub const CLAUDE_MODEL: &str = "claude-opus-5-5";
 
 /// Reasoning effort, sent explicitly rather than relying on the default.
