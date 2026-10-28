@@ -44,7 +44,10 @@ WS_TARGET_DATE=2026-06-01 scripts/coach/coach.sh
 WS_DATA_REPO=my-handle/my-fitness-data scripts/coach/coach.sh
 ```
 
-Requires `gh` (authed), `claude` CLI, `jq`, `curl`, `python3`, and `base64` on the PATH.
+Requires `gh` (authed), `claude` CLI, `jq`, `curl`, `python3`, `uuidgen`, and
+`base64` on the PATH, plus a Rust toolchain: if `target/release/coach-brief`
+isn't already built, `coach.sh` runs `cargo build --release --bin coach-brief`
+itself.
 
 ## In-app manual run (no Cowork needed)
 
@@ -86,10 +89,18 @@ After a scheduled execution:
 ## Debugging
 
 ```bash
-# Dry-run: build the brief without pushing
+# Trace every step. Note this is not a dry run — the script has no such flag,
+# and a successful run still pushes to the data repo.
 WS_DATA_REPO=my-handle/my-fitness-data bash -x scripts/coach/coach.sh
-# Inspect intermediate artifacts in $TMP (printed at top of run)
+
+# To build the brief *without* calling claude or pushing anything, run the
+# shared generator yourself against a state.json you fetched:
+cargo build --release --bin coach-brief
+target/release/coach-brief state.json exercises.json "$(date +%F)" 2026-06-01
 ```
+
+`coach.sh` works in a `mktemp -d` scratch directory that its `EXIT` trap removes,
+so copy anything you want to inspect out of it while the run is in flight.
 
 If Claude returns malformed JSON the wrapper exits with a parse error and
 prints the raw response. Re-run; if persistent, tighten the response-format

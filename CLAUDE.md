@@ -29,7 +29,7 @@ npx playwright test --config=playwright.local-chromium.config.ts    # dev contai
 npx playwright test --config=playwright.walkthrough.config.ts       # screenshot walkthroughs
 ```
 
-Important: when iterating on Playwright tests, trunk's live-reload will reload the page mid-test and break things. Both the standard and walkthrough configs pass `--no-autoreload` when they start trunk themselves; if you start trunk manually, do the same.
+Important: when iterating on Playwright tests, trunk's live-reload will reload the page mid-test and break things. All three configs pass `--no-autoreload` when they start trunk themselves; if you start trunk manually, do the same.
 
 ## Changelog, docs & releasing
 
@@ -40,9 +40,11 @@ Important: when iterating on Playwright tests, trunk's live-reload will reload t
   authored in the build cycle, not at release time.
 - **Versioning is semver** — PATCH for bug fixes, MINOR for features, MAJOR for
   breaking changes. Don't default to a minor bump out of habit.
-- Releases: bump `.release-version` via PR to `main`; merging cuts the tag and
-  auto-deploys to Pages. Bump `public/sw.js`'s `CACHE` constant when shipping
-  asset (WASM/JS/CSS/HTML) changes. See `RELEASING.md` for the full runbook.
+- Releases: PRs land on `staging` and `main` fast-forwards from it, version bumps
+  included. Bump `.release-version` via PR to `staging`; once that reaches `main`,
+  `release.yml` cuts the tag and dispatches `deploy.yml` to publish it. Bump
+  `public/sw.js`'s `CACHE` constant when shipping asset (WASM/JS/CSS/HTML)
+  changes. See `RELEASING.md` for the full runbook.
 
 ## Architecture
 
@@ -106,7 +108,7 @@ On `App` mount:
 ### PWA / deployment
 - `public/manifest.json` — Add-to-Home-Screen manifest
 - `public/sw.js` — service worker. **Cache-first for app shell, network-first for `/data/*`** (exercise library), with HTTP-cache bypass on data fetches. Bumping the `CACHE` constant (e.g. `swolesome-v9` → `v10`) forces clients to drop the old cache and refetch the app shell on next load.
-- `.github/workflows/deploy.yml` — builds via `trunk` and deploys `dist/` to GitHub Pages on push to `main`
+- `.github/workflows/deploy.yml` — builds via `trunk` and deploys `dist/` to GitHub Pages. Not on push: it runs when `release.yml` dispatches it after cutting a tag, or on a manual `workflow_dispatch` from `main` (the only branch the `github-pages` environment deploys). See `RELEASING.md`.
 - `.github/workflows/ci.yml` — Clippy + WASM unit tests + Playwright E2E
 
 ### CSV export

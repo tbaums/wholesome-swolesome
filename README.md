@@ -42,8 +42,8 @@ The app can persist state to a private GitHub repo so you can use it from both p
 
 1. Create a private GitHub repo, e.g. `wholesome-swolesome-data`. Tick *Add a README file* so it has a `main` branch. **Don't create `state.json` yourself** — the app writes it on the first push (an empty `state.json` makes sync fail with a "serde error").
 2. Create a [fine-grained personal access token](https://github.com/settings/tokens?type=beta): *Repository access → Only select repositories →* your data repo, *Permissions → Contents → Read and write*.
-3. In the app, go to *History → Options*. Under *Sync (GitHub)*, paste the token and set *Repo* to `your-username/wholesome-swolesome-data` (the pre-filled `you/…` is a placeholder). Leave *Branch* `main` and *Path* `state.json`.
-4. Tap *Push to GitHub* (in *Sync actions*). This creates `state.json`. *Test connection* now shows "✓ Connected" — before the first push it shows "remote file not found", which is expected.
+3. In the app, go to *History → Options*. Under *Sync (GitHub)*, paste the token into *Personal access token* and set *Repo (owner/name)* to `your-username/wholesome-swolesome-data`. That field arrives pre-filled with the literal text `you/wholesome-swolesome-data` — it's a real value, not a greyed-out placeholder, so you have to replace it. Leave *Branch* `main` and *Path* `state.json` as they come.
+4. Tap *Push to GitHub* (in *Sync actions*). This creates `state.json`. *Test connection* now shows "✓ Connected — sha …" — before the first push it shows "✗ remote file not found", which is expected.
 5. On any other device, open the app, go to *History → Options*, paste the same token + repo, and tap *Pull from GitHub*.
 
 After that, the app debounces a push 2 seconds after any data change, and pulls fresh state on boot when the remote is newer than the local last-push timestamp.
