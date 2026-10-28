@@ -190,6 +190,55 @@ test.describe('Coach Brief: the brief is read-on-demand', () => {
     expect(texts[1]).toBe(texts[0]);
   });
 
+  test('the copy toast paints above the overlay, not behind it', async ({ page }) => {
+    await page.locator('.brief-view-btn').click();
+    await page.locator('.brief-viewer-copy').click();
+    await expect(page.locator('.toast')).toBeVisible();
+
+    // Playwright's visibility check ignores z-order, and the overlay is opaque
+    // and covers the whole viewport — so "visible" alone would still pass with
+    // the toast painted underneath it. Compare the stacking instead.
+    // elementFromPoint can't answer this either: the toast is pointer-events:
+    // none, so it never reports itself as the element at its own centre.
+    const stacking = await page.evaluate(() => {
+      // The nearest ancestor that creates a stacking context — if both elements
+      // share one, their z-indexes are directly comparable.
+      const contextRoot = (el: HTMLElement): Element => {
+        let node = el.parentElement;
+        while (node && node !== document.documentElement) {
+          const cs = getComputedStyle(node);
+          const positioned = cs.position !== 'static' && cs.zIndex !== 'auto';
+          if (
+            positioned ||
+            cs.transform !== 'none' ||
+            cs.filter !== 'none' ||
+            parseFloat(cs.opacity) < 1 ||
+            cs.isolation === 'isolate' ||
+            cs.willChange.includes('transform') ||
+            cs.willChange.includes('opacity')
+          ) {
+            return node;
+          }
+          node = node.parentElement;
+        }
+        return document.documentElement;
+      };
+      const toast = document.querySelector('.toast') as HTMLElement;
+      const viewer = document.querySelector('.brief-viewer') as HTMLElement;
+      return {
+        toastZ: parseInt(getComputedStyle(toast).zIndex, 10),
+        viewerZ: parseInt(getComputedStyle(viewer).zIndex, 10),
+        viewerOpaque: getComputedStyle(viewer).backgroundColor,
+        sharedContext: contextRoot(toast) === contextRoot(viewer),
+      };
+    });
+
+    expect(stacking.sharedContext).toBe(true);
+    expect(stacking.toastZ).toBeGreaterThan(stacking.viewerZ);
+    // The overlay really is opaque, which is why the ordering has to hold.
+    expect(stacking.viewerOpaque).not.toBe('rgba(0, 0, 0, 0)');
+  });
+
   test('Close returns to the screen with the pasted JSON still in the box', async ({ page }) => {
     await pasteBox(page).fill(WORKOUT_JSON);
     const scrollBefore = await page.evaluate(() => window.scrollY);
