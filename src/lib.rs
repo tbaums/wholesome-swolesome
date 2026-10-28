@@ -1,4 +1,5 @@
 pub mod app;
+pub mod claude_api;
 pub mod coach;
 pub mod components;
 pub mod csv_utils;

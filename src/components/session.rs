@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 
 use crate::app::{AppState, View};
 
@@ -754,12 +755,8 @@ fn CardioActualsImport() -> impl IntoView {
         }
     };
 
-    let import = move |_| {
-        let text = response_text.get_untracked();
-        if text.trim().is_empty() {
-            status.set(Some("Paste Claude's JSON response first.".into()));
-            return;
-        }
+    // One apply path for both the pasted response and the API response.
+    let apply_actuals = move |text: String| {
         match crate::coach::parse_cardio_actuals(&text) {
             Ok(actuals) => {
                 let mut applied_to: Option<String> = None;
@@ -804,6 +801,56 @@ fn CardioActualsImport() -> impl IntoView {
         }
     };
 
+    let import = move |_| {
+        let text = response_text.get_untracked();
+        if text.trim().is_empty() {
+            status.set(Some("Paste Claude's JSON response first.".into()));
+            return;
+        }
+        apply_actuals(text);
+    };
+
+    // ── Optional direct-to-API path ──────────────────────────────────────────
+    // Same prompt as the copy flow, same parser. Only rendered with a key saved;
+    // the copy/paste block below stays visible as the fallback.
+    let claude_key = RwSignal::new(crate::storage::load_claude_config().api_key);
+    let has_key = move || !claude_key.get().trim().is_empty();
+    let reading = RwSignal::new(false);
+
+    let pick_screenshot = move |ev: leptos::ev::Event| {
+        let input = event_target::<web_sys::HtmlInputElement>(&ev);
+        let Some(file) = input.files().and_then(|f| f.get(0)) else { return };
+        let key = claude_key.get_untracked().trim().to_string();
+        if key.is_empty() {
+            status.set(Some("No Claude API key saved — add one in Options.".into()));
+            return;
+        }
+        let media_type = file.type_();
+        let prompt = prompt_text();
+        reading.set(true);
+        status.set(None);
+        spawn_local(async move {
+            let Some(part) = crate::claude_api::read_image_file(&file, &media_type).await else {
+                // Rejected locally — no request is made.
+                reading.set(false);
+                status.set(Some(
+                    "✗ That file isn't a usable image (wrong type, empty, or over 5 MB).".into(),
+                ));
+                state.show_toast("Not a usable image");
+                return;
+            };
+            let result = crate::claude_api::send_message(&key, &prompt, Some(&part)).await;
+            reading.set(false);
+            match result {
+                Ok(text) => apply_actuals(text),
+                Err(e) => {
+                    status.set(Some(format!("✗ {e}")));
+                    state.show_toast(format!("{e}"));
+                }
+            }
+        });
+    };
+
     view! {
         {move || has_any_cardio().then(|| view! {
             <div class="cardio-import-card">
@@ -811,6 +858,21 @@ fn CardioActualsImport() -> impl IntoView {
                 <div class="ci-blurb">
                     "1. Copy the prompt below. 2. Open a Claude conversation, paste the prompt, drop in your Apple Health workout-summary screenshot. 3. Paste Claude's response in the box below."
                 </div>
+                {move || has_key().then(|| view! {
+                    <div class="ci-direct">
+                        <label class="text-sm text-muted">"Or send the screenshot straight to Claude"</label>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            class="ci-file-input"
+                            disabled=move || reading.get()
+                            on:change=pick_screenshot
+                        />
+                        {move || reading.get().then(|| view! {
+                            <div class="text-sm ci-generating">"Generating…"</div>
+                        })}
+                    </div>
+                })}
                 <div class="ci-prompt-wrap">
                     <pre class="ci-prompt">{prompt_text}</pre>
                     <button class="ci-copy-btn" on:click=copy_prompt aria-label="Copy prompt">"📋 Copy"</button>

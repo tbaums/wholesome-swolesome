@@ -74,10 +74,16 @@ async function goToOptions(page: Page) {
   await page.locator('button').filter({ hasText: 'Options' }).click();
   // Form fields rendered by OptionsView
   await page.waitForSelector('input[type="password"]');
+  // Two password inputs live on this page now (the optional Claude API key card
+  // sits above Sync), so scope to the Sync card rather than matching by type.
 }
 
 async function fillSyncForm(page: Page, repo = 'owner/data-repo') {
-  await page.locator('input[type="password"]').fill('ghp_test_token_xxxxxxxxxxxx');
+  await page
+    .locator('.card')
+    .filter({ hasText: 'Sync (GitHub)' })
+    .locator('input[type="password"]')
+    .fill('ghp_test_token_xxxxxxxxxxxx');
   // Repo is the first text input on the page
   await page.locator('input[type="text"]').first().fill(repo);
 }
