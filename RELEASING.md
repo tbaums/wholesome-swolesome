@@ -1,13 +1,16 @@
 # Releasing
 
 **Production = the latest published GitHub Release.** The live GitHub Pages site
-is built and deployed from the release's tag — *not* from every commit on `main`.
+is built and deployed when a release is cut — *not* from every commit that lands
+on `staging` or `main`.
 
-- `main` is **staging**: CI (`ci.yml`) gates it, but merging to `main` no longer
-  touches the live site.
-- Publishing a **release** is what promotes to **production**: `release.yml` cuts
-  the tag + GitHub Release, then **dispatches `deploy.yml` at that tag**, which
-  runs `trunk build --release` and deploys `dist/` to Pages.
+- Work lands on **`staging`**: PRs are opened against `staging`, and `ci.yml`
+  gates every PR. `main` then **fast-forwards from `staging`**. Neither merging
+  to `staging` nor fast-forwarding `main` touches the live site.
+- Cutting a **release** is what promotes to **production**: `release.yml` cuts
+  the tag + GitHub Release, then **dispatches `deploy.yml` at `main`** — the
+  commit it just tagged — which runs `trunk build --release` and deploys `dist/`
+  to Pages.
 
 > **Why the explicit dispatch (not the `release: published` event):** a release
 > created by `release.yml` uses the default `GITHUB_TOKEN`, and GitHub suppresses
@@ -15,8 +18,14 @@ is built and deployed from the release's tag — *not* from every commit on `mai
 > recursion). So the `release: published` event never starts `deploy.yml`.
 > `workflow_dispatch` is one of the two documented exceptions `GITHUB_TOKEN` may
 > trigger, so `release.yml` ends by running `gh workflow run deploy.yml --ref
-> <tag>`. (Before this was wired up, v0.4.0 and v0.5.0 were tagged but never
+> main`. (Before this was wired up, v0.4.0 and v0.5.0 were tagged but never
 > deployed until dispatched by hand — see #53.)
+
+> **Why `--ref main` and not the tag:** the `github-pages` environment's
+> deployment-branch policy only permits `main`, so a run on a tag ref is rejected
+> at the deploy step (it surfaces as `BlobNotFound`) — v0.5.1's first auto-deploy
+> hit exactly that. Dispatching `main` builds the same code anyway, because
+> `release.yml` tagged `main`'s tip.
 
 ## Versioning
 
@@ -50,37 +59,45 @@ The version-file path is the normal flow (and the only one remote agents can use
 since they can't push tags or dispatch workflows):
 
 1. Bump `.release-version` to the new tag (e.g. `v0.1.0` → `v0.2.0`) on a branch
-   and open a PR into `main`.
-2. Merge the PR. `release.yml` fires on the `.release-version` change, creates the
-   tag at the merge commit, and publishes a GitHub Release with auto-generated
-   notes.
-3. Publishing that Release fires `deploy.yml`, which builds the tagged commit and
-   deploys it to Pages. The live site now reflects the new release.
+   and open a PR into `staging` — version bumps go through `staging` like every
+   other change.
+2. Merge the PR, then fast-forward `main` from `staging`. `release.yml` watches
+   `.release-version` on **`main`**, so it fires when the bump arrives there,
+   creates the tag at that commit, and publishes a GitHub Release with
+   auto-generated notes.
+3. `release.yml` then dispatches `deploy.yml` itself (at `main`, which is the
+   commit it just tagged), and that builds and deploys to Pages. The live site
+   now reflects the new release.
 
 Re-running `release.yml` for a tag that already exists is a no-op, so a no-change
 merge to `.release-version` can't clobber a published release.
 
 > Alternative: maintainers with push access can instead run **Actions → Release →
-> Run workflow** and pass the tag directly. Same downstream effect.
+> Run workflow** from `main` and pass the tag directly — it tags `main`'s tip, so
+> same downstream effect.
 
 ## Manually redeploy the current release
 
 Use this if a deploy failed or Pages needs a rebuild without cutting a new tag:
 
-- **Actions → Deploy to GitHub Pages → Run workflow** (`workflow_dispatch`).
-- On a manual run there is no release tag, so the build checks out the default
-  branch (`main`) and deploys the tip of main. To redeploy a *specific* release
-  instead, use the rollback flow below.
+- **Actions → Deploy to GitHub Pages → Run workflow** (`workflow_dispatch`),
+  **from `main`**.
+- On a manual run there is no release tag, so the build checks out the branch the
+  run was dispatched from and deploys its tip. Dispatch from `main`: it is the
+  only branch the `github-pages` environment will deploy. To put a *specific*
+  older release back up, use the rollback flow below.
 
 ## Roll back to a prior release
 
-To put an older release back on the live site, re-run that release's deploy:
+Pages only ever deploys `main`, so a rollback means getting the older code onto
+`main` and redeploying it:
 
-- **Actions → Deploy to GitHub Pages**, open the run from when that release was
-  published, and **Re-run all jobs**. It re-checks-out that tag and redeploys it.
-- If no such run exists, re-publish the target Release from the Releases page
-  (unpublish → publish, or edit + publish); publishing fires `deploy.yml` for that
-  tag again.
+- Revert the offending change on `staging` and fast-forward `main`, then
+  **Actions → Deploy to GitHub Pages → Run workflow** from `main`. Cutting a new
+  PATCH release off that reverted `main` does the same thing and keeps the
+  release history honest about what is live.
+- Re-running an *old* deploy run does **not** roll back: releases are deployed by
+  a dispatch at `main`, so re-running one rebuilds whatever `main` points at now.
 
 ## Service-worker cache (`public/sw.js`)
 
