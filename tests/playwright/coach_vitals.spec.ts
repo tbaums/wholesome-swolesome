@@ -35,7 +35,7 @@ function responseWithVitals(opts: {
 
 async function openCoachBrief(page: import('@playwright/test').Page) {
   await page.locator('button').filter({ hasText: 'Generate workout with Claude' }).click();
-  await page.waitForSelector('.coach-packet-pre');
+  await page.waitForSelector('.brief-copy-btn');
 }
 
 async function readGoalsFromStorage(page: import('@playwright/test').Page) {

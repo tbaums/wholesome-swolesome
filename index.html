@@ -769,8 +769,10 @@
     .note-preview.is-empty { color: var(--text-muted); }
 
     /* Top-anchored full-viewport editing surface. Top-anchored + 100dvh keeps
-       the caret above the iOS keyboard; z-index sits above nav (100) + toast
-       (300); 16px font avoids iOS focus auto-zoom (global inputs are 14px). */
+       the caret above the iOS keyboard; z-index sits above nav (100) but below
+       the toast (500), which has to stay readable over this opaque surface
+       since actions inside it (the brief viewer's Copy) raise one; 16px font
+       avoids iOS focus auto-zoom (global inputs are 14px). */
     .note-editor {
       position: fixed;
       inset: 0;
@@ -826,7 +828,11 @@
       border-radius: 24px;
       font-size: 14px;
       font-weight: 600;
-      z-index: 300;
+      /* Top of the stack: above nav (100) and above the full-viewport overlays
+         (.note-editor / .brief-viewer, 400). Those are opaque, so a toast
+         raised from inside one — e.g. the brief viewer's Copy — would
+         otherwise paint underneath it and confirm nothing. */
+      z-index: 500;
       pointer-events: none;
       animation: slideUp 0.2s ease-out;
       box-shadow: 0 4px 20px rgba(168,85,247,0.3);
@@ -1094,6 +1100,22 @@
       word-break: break-word;
       max-height: 60vh;
       overflow: auto;
+    }
+
+    /* Viewer variant: inside the full-screen brief overlay the packet IS the
+       body, so it fills the remaining height instead of being a bounded,
+       bordered block in the page. Bottom padding clears the home indicator. */
+    .coach-packet-pre.coach-packet-viewer {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      background: var(--surface);
+      padding: 16px;
+      padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
+      -webkit-overflow-scrolling: touch;
     }
 
     /* ── Utilities ── */

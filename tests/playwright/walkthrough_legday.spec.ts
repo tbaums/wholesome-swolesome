@@ -77,7 +77,7 @@ test.describe('Leg-day walkthrough', () => {
     await page.locator('.nav-btn').filter({ hasText: 'Workout' }).click();
     await page.waitForSelector('.today-card');
     await page.locator('button', { hasText: 'Generate workout with Claude' }).click();
-    await page.waitForSelector('.coach-packet-pre');
+    await page.waitForSelector('.brief-copy-btn');
 
     // Target date auto-computes to today (no scheduled workout yet).
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));

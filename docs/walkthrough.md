@@ -11,8 +11,8 @@
     01-home-empty.png             walkthrough_hypertrophy     01_home_empty.png
     02-goals-and-cardio.png       walkthrough_hypertrophy     06_options_goals_filled.png
     03-library-detail.png         walkthrough_legday          02_library_detail_squat.png
-    04-coach-brief-top.png        walkthrough_hypertrophy     08_coach_brief_top.png
-    05-coach-brief-bottom.png     walkthrough_hypertrophy     09_coach_brief_bottom.png
+    04-coach-brief.png            walkthrough_hypertrophy     08_coach_brief.png
+    05-coach-brief-viewer.png     walkthrough_hypertrophy     09_coach_brief_viewer.png
     06-today-scheduled.png        walkthrough_hypertrophy     12_home_with_scheduled.png
     07-session-view.png           walkthrough_hypertrophy     14_session_exercise_open.png
     08-heatmap-after.png          walkthrough_hypertrophy     18_history_after_session.png
@@ -29,9 +29,9 @@
   capture with the fixed bottom nav and sticky header neutralised, since
   Chromium otherwise paints them at their *viewport* position, i.e. across the
   middle of a tall image, hiding whatever is behind them. 04 and 05 are the
-  exception: they're the same document seen at two scroll positions, so they
-  use `viewportShot` (a plain phone-screen capture, chrome where it belongs)
-  and stay two distinct pictures.
+  exception and use `viewportShot` (a plain phone-screen capture, chrome where
+  it belongs): 04's screen fits one phone screen exactly, and 05 is the fixed
+  full-viewport brief viewer, which a fullPage capture would paint wrong.
 -->
 
 # Wholesome Swolesome — a tour
@@ -80,13 +80,18 @@ file; no API calls.
 
 ### 4. The Coach Brief
 
-<img src="walkthrough/04-coach-brief-top.png" width="320" alt="Coach Brief — markdown packet showing goals, cardio/mobility targets, and mobility recovery">
+<img src="walkthrough/04-coach-brief.png" width="320" alt="Coach Brief — Copy brief on its own row, then View brief / Download .md, then the paste-JSON box">
 
 When you tap *Generate workout with Claude*, the app builds a markdown packet
 containing everything Claude needs to plan a session: your goals, weekly cardio
 minutes hit so far, current VO2 max, mobility/balance focus levels, days-since-
 each-muscle-was-worked, days-since-each-muscle-was-stretched, recent training, and
 the full exercise library inline (so Claude can only choose valid IDs).
+
+That packet is long — hundreds of lines — and the things you actually do here are
+*copy it* and *paste the answer back*. So the screen leads with those: **Copy
+brief** on its own full-width row, then the paste box, with the brief itself one
+tap away behind **View brief** rather than sitting between them.
 
 Three things the brief is careful about, each the fix for a way the coach used to
 go wrong:
@@ -108,7 +113,11 @@ go wrong:
 
 ### 5. Paste Claude's response
 
-<img src="walkthrough/05-coach-brief-bottom.png" width="320" alt="Bottom of Coach Brief — paste-area for Claude's JSON response">
+<img src="walkthrough/05-coach-brief-viewer.png" width="320" alt="View brief — the full markdown packet in a read-only full-screen viewer with Close and Copy in the bar">
+
+*View brief* opens the packet full-screen, read-only, with its own *📋 Copy* in
+the bar so you can read and copy without going back first. *✕ Close* returns to
+the screen with anything already in the paste box untouched.
 
 Copy the brief into any Claude conversation — Claude Code, the Claude mobile app,
 claude.ai. (If you also paste an Apple Health VO2-max screenshot into the same

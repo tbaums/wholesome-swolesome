@@ -778,6 +778,10 @@ pub fn CoachPacketView() -> impl IntoView {
 
     let response_text: RwSignal<String> = RwSignal::new(String::new());
     let import_status: RwSignal<Option<String>> = RwSignal::new(None);
+    // The brief is read-on-demand: Copy and the JSON paste box are the actions,
+    // so the packet itself lives behind a full-screen viewer (#42's overlay
+    // pattern) instead of sitting between them. Open flag only — no new state.
+    let viewing_brief = RwSignal::new(false);
 
     let copy_packet = move |_| {
         let text = packet();
@@ -937,12 +941,26 @@ pub fn CoachPacketView() -> impl IntoView {
                 </div>
             })}
 
-            <div style="display:flex; gap:8px; margin-bottom:8px">
-                <button class="btn btn-primary" style="flex:1" on:click=copy_packet>"📋 Copy brief"</button>
-                <button class="btn btn-secondary" style="flex:1" on:click=download_packet>"⬇ Download .md"</button>
-            </div>
+            // Copy keeps its own full-width row: it's the dominant action, and it
+            // must work without opening the viewer first.
+            <button
+                class="btn btn-primary btn-full brief-copy-btn"
+                style="margin-bottom:8px"
+                on:click=copy_packet
+            >"📋 Copy brief"</button>
 
-            <pre class="coach-packet-pre">{packet}</pre>
+            <div style="display:flex; gap:8px; margin-bottom:8px">
+                <button
+                    class="btn btn-secondary brief-view-btn"
+                    style="flex:1"
+                    on:click=move |_| viewing_brief.set(true)
+                >"👁 View brief"</button>
+                <button
+                    class="btn btn-secondary brief-download-btn"
+                    style="flex:1"
+                    on:click=download_packet
+                >"⬇ Download .md"</button>
+            </div>
 
             <div class="card" style="margin-top:14px">
                 <div class="fw-600" style="margin-bottom:6px">"Paste Claude's JSON response"</div>
@@ -964,6 +982,26 @@ pub fn CoachPacketView() -> impl IntoView {
                 >"Import workout"</button>
             </div>
         </div>
+
+        // Read-only brief viewer. Same overlay chrome as the note editor (#42),
+        // but the body is the packet in a scrolling <pre> — nothing to edit, and
+        // Copy is repeated in the bar so a reader needn't close first.
+        {move || viewing_brief.get().then(|| view! {
+            <div class="note-editor brief-viewer">
+                <div class="note-editor-bar">
+                    <button
+                        class="btn btn-ghost brief-viewer-close"
+                        on:click=move |_| viewing_brief.set(false)
+                    >"✕ Close"</button>
+                    <span class="note-editor-title">"Coach Brief"</span>
+                    <button
+                        class="btn btn-secondary btn-sm brief-viewer-copy"
+                        on:click=copy_packet
+                    >"📋 Copy"</button>
+                </div>
+                <pre class="coach-packet-pre coach-packet-viewer">{packet}</pre>
+            </div>
+        })}
     }
 }
 

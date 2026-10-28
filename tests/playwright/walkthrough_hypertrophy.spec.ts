@@ -170,15 +170,18 @@ test.describe('Hypertrophy walkthrough', () => {
     await shot(page, 'home_after_goals');
 
     await page.locator('button', { hasText: 'Generate workout with Claude' }).click();
-    await page.waitForSelector('.coach-packet-pre');
-    // Viewport shots: "top of the brief" and "its paste box at the bottom" are
-    // the same document, so a fullPage capture of each would be the same image.
-    await shot(page, 'coach_brief_top', { viewport: true });
+    await page.waitForSelector('.brief-copy-btn');
+    // Viewport shots: the screen now fits one phone screen (the brief itself is
+    // behind "View brief"), and the viewer is a fixed full-viewport overlay,
+    // which a fullPage capture would paint wrong.
+    await shot(page, 'coach_brief', { viewport: true });
+
+    await page.locator('.brief-view-btn').click();
+    await page.waitForSelector('.coach-packet-viewer');
+    await shot(page, 'coach_brief_viewer', { viewport: true });
+    await page.locator('.brief-viewer-close').click();
 
     // Target date auto-computes to today (no scheduled workout yet).
-    // Scroll to bottom of the brief so paste textarea is visible.
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await shot(page, 'coach_brief_bottom', { viewport: true });
 
     // ── 11. Paste the Claude-style JSON response and import ──────────────────
     const pasteBox = page.locator('textarea').filter({ hasText: '' }).last();
