@@ -138,18 +138,23 @@ test.describe('Hypertrophy walkthrough', () => {
       await page.locator('.goal-pill').filter({ hasText: new RegExp(`^${eq}$`) }).click();
     }
 
-    // ── 9. Notes textarea — a generic athletic-shape prompt ──────────────────
-    const textareas = page.locator('.card textarea');
+    // ── 9. Free-text goal fields — now tap-to-open full-screen editors (#42) ──
+    // `.note-preview` cards stand in for the old inline textareas: tap one,
+    // type into the overlay's `.note-editor-area`, tap Done to commit.
+    const fillNote = async (idx: number, text: string) => {
+      await page.locator('.note-preview').nth(idx).click();
+      await page.waitForSelector('.note-editor-area');
+      await page.locator('.note-editor-area').fill(text);
+      await page.locator('.note-editor-bar button', { hasText: 'Done' }).click();
+      await page.waitForSelector('.note-editor', { state: 'detached' });
+    };
     // avoid box first
-    await textareas.nth(0).fill(
-      'Left shoulder limitation — no heavy overhead pressing.',
-    );
-    await textareas.nth(0).press('Tab');
+    await fillNote(0, 'Left shoulder limitation — no heavy overhead pressing.');
     // notes box second
-    await textareas.nth(1).fill(
+    await fillNote(
+      1,
       'Hypertrophy focus; balanced push/pull. Prefer compound lifts. Building glutes and posterior chain for athletic shape.',
     );
-    await textareas.nth(1).press('Tab');
 
     await shot(page, 'options_goals_filled');
 

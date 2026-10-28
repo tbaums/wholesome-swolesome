@@ -17,6 +17,9 @@ for breaking changes. See `RELEASING.md`.
 
 ## [Unreleased]
 
+### Documentation
+- **Walkthrough refreshed against everything merged since 2026-06-01** (#58, code none — docs only, docs this change) — `docs/walkthrough.md` had not moved since `ad76b42` while ~15 PRs (#24–#57) changed what it describes. Rewritten against the source: the full-screen note editor for injuries/coach notes (#42), the Z1–Z5 heart-rate zone grid and zone-derived RPE that replaced min × RPE for cardio (#28–#32, #51), the weight input kept for commonly-loaded body-only lifts (#27), the Exercises-tab "Logging for" date picker (#26), Apple Health re-import correcting in place (#39), the coach brief's planned-vs-logged / no-invented-preferences / stretching-excluded-from-recovery rules (#33–#35), the nightly agent running off the shared `coach-brief` generator (#38), and Pages deploying from published releases rather than every push to `main` (#43, #53). `02-goals-and-cardio.png` recaptured (the only curated scene whose UI actually changed); the other eight screens are unchanged in the source, so their images were left alone. The curated→spec→raw screenshot mapping is now recorded at the top of the walkthrough, and `walkthrough_hypertrophy.spec.ts` drives the note editor instead of the removed inline textareas.
+
 ### Fixed
 - **Auto-deploy dispatches `main`, not the release tag** (#53, code this change, docs none — internal) — the `github-pages` environment's deployment-branch policy only permits `main`, so dispatching `deploy.yml` at the tag was rejected (`BlobNotFound`); v0.5.1's first auto-deploy attempt hit this. `release.yml` now dispatches `main`, which is the just-tagged commit, so the release still deploys exactly its own code. Rolls into the next release.
 

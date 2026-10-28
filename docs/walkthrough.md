@@ -1,3 +1,31 @@
+<!--
+  Curated screenshots → the walkthrough spec + raw file that produced each one.
+
+  The harness (`npx playwright test --config=playwright.walkthrough.config.ts`)
+  never writes to docs/walkthrough/. It writes raw, spec-numbered shots to the
+  gitignored tests/playwright/screenshots/<spec>/. To refresh a curated image,
+  run the harness and copy the raw file over the curated one, keeping the
+  curated name:
+
+    curated file                  spec                        raw file
+    01-home-empty.png             walkthrough_hypertrophy     01_home_empty.png
+    02-goals-and-cardio.png       walkthrough_hypertrophy     06_options_goals_filled.png
+    03-library-detail.png         walkthrough_legday          02_library_detail_squat.png
+    04-coach-brief-top.png        walkthrough_hypertrophy     08_coach_brief_top.png
+    05-coach-brief-bottom.png     walkthrough_hypertrophy     09_coach_brief_bottom.png
+    06-today-scheduled.png        walkthrough_hypertrophy     12_home_with_scheduled.png
+    07-session-view.png           walkthrough_hypertrophy     14_session_exercise_open.png
+    08-heatmap-after.png          walkthrough_hypertrophy     18_history_after_session.png
+    09-home-done.png              walkthrough_hypertrophy     20_home_after_finish_done.png
+
+  e.g. cp tests/playwright/screenshots/walkthrough_hypertrophy/01_home_empty.png \
+          docs/walkthrough/01-home-empty.png
+
+  The raw filenames are the spec's shot order, so adding or removing a `shot()`
+  call renumbers everything after it — re-check this table when a spec changes.
+  README.md embeds 06, 07 and 08; don't rename those.
+-->
+
 # Wholesome Swolesome — a tour
 
 A mobile-first workout tracker that asks **Claude** to plan each day's session against
@@ -25,7 +53,10 @@ coach hasn't planned today's session yet, so you tap *Generate workout with Clau
 
 One-time setup. Primary goal (Hypertrophy / Strength / Fat loss / Endurance / General
 fitness), sessions per week, session minutes, available equipment, injuries to avoid,
-freeform coaching notes. Below: **Cardio & mobility** — weekly cardio minutes target,
+freeform coaching notes. The two free-text fields aren't inline textareas: each is a
+tappable preview card that clamps to three lines and opens a **full-screen editor**
+(Cancel / Done) — on a phone, typing a paragraph into a 2-row box wedged between other
+controls was miserable. Below: **Cardio & mobility** — weekly cardio minutes target,
 latest VO2 max (with the date it's from), and Low/Standard/High focus levels for
 mobility and balance. Everything below the Training-goals card is optional.
 
@@ -49,6 +80,24 @@ minutes hit so far, current VO2 max, mobility/balance focus levels, days-since-
 each-muscle-was-worked, days-since-each-muscle-was-stretched, recent training, and
 the full exercise library inline (so Claude can only choose valid IDs).
 
+Three things the brief is careful about, each the fix for a way the coach used to
+go wrong:
+
+- **"Worked" means strength/cardio/plyometric work only.** Stretching and balance
+  drills don't count toward muscle recovery — they're tracked in the separate
+  mobility table — so a week of hamstring stretches no longer reads as a week of
+  hamstring training.
+- **The recent-training rundown lists only sets you actually checked off.** Planned
+  session titles are omitted entirely and exercises with zero completed sets are
+  dropped, so a day *planned* as "Upper Pull" whose pull work never happened can't
+  be mis-credited as done. Freeform drafts you never finalized still count — a
+  checked-off set is real work.
+- **No invented preferences.** The task rules tell Claude that your behavioral
+  constraints are *only* what's written in the Goals section; it may not infer new
+  ones from your history ("they seem to avoid floor work"). Cardio entries carry
+  their per-zone minute breakdown and the RPE derived from it, so intensity is read
+  off the real distribution rather than guessed.
+
 ### 5. Paste Claude's response
 
 <img src="walkthrough/05-coach-brief-bottom.png" width="320" alt="Bottom of Coach Brief — paste-area for Claude's JSON response">
@@ -57,6 +106,8 @@ Copy the brief into any Claude conversation — Claude Code, the Claude mobile a
 claude.ai. (If you also paste an Apple Health VO2-max screenshot into the same
 conversation, Claude will extract the reading and include it in the response.) You
 get back a strict JSON object describing one workout. Paste it here, tap *Import workout*.
+Cardio exercises in that JSON can carry per-zone heart-rate minutes rather than a flat
+duration, which is what the Apple Health flow (step 7 and below) feeds back in.
 
 ### 6. Today's workout
 
@@ -71,9 +122,26 @@ rationale, then the exercise list with target sets × rep ranges. Tap *Start wor
 
 Each exercise is an accordion. Open it, enter weight + reps for each set, tap ✓ to
 log it. Inputs pre-fill with the values from the matching set in your last session,
-so you can usually just tap-tap-tap through it. Cardio exercises show min × RPE
-instead. Stretching/balance exercises show a duration timer. The session auto-saves
-to localStorage — close the browser mid-workout, resume later.
+so you can usually just tap-tap-tap through it. Stretching/balance exercises show a
+duration timer. The session auto-saves to localStorage — close the browser
+mid-workout, resume later.
+
+Two exceptions to weight × reps:
+
+- **Cardio** gets a **Z1–Z5 heart-rate zone grid** — one minutes box per zone, not a
+  single min × RPE pair. Zones the coach prescribed show their `/ N min` target and
+  start pre-filled at the planned value; the rest are blank. Minutes can be
+  fractional, because Apple Health reports them that way. You never type an RPE for
+  cardio: it's derived from the zone distribution you logged, so History, the
+  per-exercise progress view, and the coach brief all read the same number. A
+  *Paste cardio summary* box below the exercises turns an Apple Health
+  workout-summary screenshot into those zone minutes (plus Claude's inferred RPE) —
+  it appears for any cardio in the session, prescribed or ad-hoc.
+- **Bodyweight exercises** drop the weight box and log reps only — unless they're one
+  of the lifts people routinely load — pull-ups, chin-ups, dips, hanging leg raises,
+  weighted crunches and a few others — which keep a weight input for the plate or belt
+  you added. The library's `equipment` field tags all of those "body only", so the
+  exceptions are a short curated allow-list in `src/library.rs`.
 
 ### 8. The heatmap closes the loop
 
@@ -143,13 +211,19 @@ Why this is the right call:
   Paste an Apple Health screenshot into the same Claude conversation alongside the
   brief. Claude reads the value off the image, returns it as a top-level `vitals`
   block in the JSON response, and the app's importer updates your goals with it
-  (dropping stale source-dates silently).
+  (dropping stale source-dates silently). The same trick handles cardio *actuals*:
+  a workout-summary screenshot comes back as per-zone minutes plus an inferred
+  1–10 RPE, which the session view writes straight onto the logged set. Re-import
+  the same workout and it corrects the existing entry in place rather than adding
+  a duplicate.
 - **You can also run the same prompt unattended.** `scripts/coach/coach.sh` plus
   Cowork's `/schedule` gives you a nightly agent that pulls your state from GitHub,
-  fetches the library, runs the same prompt template, parses the response,
-  validates every `library_id` against the bundled library, and pushes the new
-  workout back to your data repo. You wake up, open the PWA, today's session is
-  there.
+  fetches the library, builds the brief, parses the response, validates every
+  `library_id` against the bundled library, and pushes the new workout back to your
+  data repo. It doesn't keep its own copy of the prompt: it shells out to the
+  `coach-brief` binary, which calls the same `coach::build_coach_packet` the in-app
+  Coach Brief does, so the nightly agent and the button in your pocket can't drift
+  apart. You wake up, open the PWA, today's session is there.
 
 ### 3. Rust → WASM → PWA on iPhone Safari
 
@@ -167,8 +241,10 @@ Why Rust + WASM + PWA when basically every other production frontend is React?
   library JSON is network-first with HTTP-cache bypass. You can lose service in
   the gym basement and the PWA still loads and logs.
 - **No app-store review.** "Add to Home Screen" installs it like a native app,
-  with an icon, splash screen, and standalone window — but you push updates by
-  merging to main, no Apple/Google review cycle.
+  with its own dumbbell icon, splash screen, and standalone window — but you ship
+  updates by publishing a GitHub Release, no Apple/Google review cycle. (Merging to
+  `main` is staging; a published release is what deploys to Pages, so the live app
+  only moves when someone decides it should.)
 
 **And the killer iOS-PWA quirk that justifies the no-account design:** Google
 OAuth on iOS PWAs is *fundamentally broken*. The OAuth redirect bounces you to
@@ -188,10 +264,20 @@ about again — sidesteps the whole pile.
   session for that exercise (matched by `library_id`, falling back to exact name).
   Pyramid sets, drop sets, and warm-up sets all preserve their structure across
   sessions.
+- **Log anything, any day, from the Exercises tab.** You don't need a planned
+  session to log work. Search the library, tap an exercise, log sets straight onto
+  an ad-hoc entry. A **"Logging for" date picker** at the top of the tab (capped at
+  today, with a *⏱ Backdated* marker when it isn't today) backfills yesterday's
+  session when you forgot in the moment — it sets both the entry's date and each
+  set's completion date, so the heatmap and the coach brief see the work on the day
+  it actually happened.
 - **Two body silhouettes, two semantics.** The History heatmap colors by *days
   since strength-worked*. The Coach Brief separately tracks *days since last
   stretched* per muscle, which feeds into mobility prescription. Same body, two
-  different views of recovery.
+  different views of recovery. Stretching and balance work never counts as
+  "worked" on either the heatmap or the recovery table — a 30s cooldown stretch
+  isn't a training stimulus, and crediting it told the coach a muscle was still
+  recovering when it wasn't.
 - **Library validation is enforced both client- and server-side.** The coach
   packet inlines every valid exercise ID; the importer rejects any
   `library_id` not in the bundled library; the nightly `coach.sh` aborts the
@@ -205,9 +291,12 @@ about again — sidesteps the whole pile.
   (date, day, exercise, set #, reps, weight, completed, duration). If you ever
   outgrow the app, you walk away with a CSV.
 - **Walkthrough-as-tests.** This page's screenshots come from
-  `tests/playwright/walkthrough_hypertrophy.spec.ts` — the same e2e test that
-  proves the goal → coach → session → history flow works end-to-end. Updating
-  the screenshots is just re-running the test.
+  `tests/playwright/walkthrough_hypertrophy.spec.ts` and `walkthrough_legday.spec.ts`
+  — the same e2e tests that prove the goal → coach → session → history flow works
+  end-to-end. Updating the screenshots is just re-running the harness
+  (`npx playwright test --config=playwright.walkthrough.config.ts`) and copying the
+  raw shots over the curated ones; the mapping is in the comment at the top of this
+  file.
 
 ---
 
