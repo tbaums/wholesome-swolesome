@@ -24,6 +24,14 @@
   The raw filenames are the spec's shot order, so adding or removing a `shot()`
   call renumbers everything after it — re-check this table when a spec changes.
   README.md embeds 06, 07 and 08; don't rename those.
+
+  Capture modes (`helpers.ts`): everything is a `fullPageShot` — a fullPage
+  capture with the fixed bottom nav and sticky header neutralised, since
+  Chromium otherwise paints them at their *viewport* position, i.e. across the
+  middle of a tall image, hiding whatever is behind them. 04 and 05 are the
+  exception: they're the same document seen at two scroll positions, so they
+  use `viewportShot` (a plain phone-screen capture, chrome where it belongs)
+  and stay two distinct pictures.
 -->
 
 # Wholesome Swolesome — a tour
