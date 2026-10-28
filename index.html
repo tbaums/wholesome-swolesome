@@ -1096,6 +1096,22 @@
       overflow: auto;
     }
 
+    /* Viewer variant: inside the full-screen brief overlay the packet IS the
+       body, so it fills the remaining height instead of being a bounded,
+       bordered block in the page. Bottom padding clears the home indicator. */
+    .coach-packet-pre.coach-packet-viewer {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      background: var(--surface);
+      padding: 16px;
+      padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
+      -webkit-overflow-scrolling: touch;
+    }
+
     /* ── Utilities ── */
     .row       { display: flex; gap: 8px; }
     .col       { display: flex; flex-direction: column; gap: 8px; }

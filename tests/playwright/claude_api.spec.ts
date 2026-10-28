@@ -138,7 +138,7 @@ test.describe('Claude API key (optional)', () => {
 
   test('with no key saved the Coach Brief is the copy/paste flow, unchanged', async ({ page }) => {
     await page.locator('button', { hasText: 'Generate workout with Claude' }).click();
-    await page.waitForSelector('.coach-packet-pre');
+    await page.waitForSelector('.brief-copy-btn');
     await expect(page.locator('.claude-generate-card')).toHaveCount(0);
     await expect(page.locator('button', { hasText: 'Copy brief' })).toBeVisible();
     await expect(page.locator('button', { hasText: 'Import workout' })).toBeVisible();
