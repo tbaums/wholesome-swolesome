@@ -6,6 +6,7 @@ use crate::app::{current_date, current_datetime, build_synced_state, AppState, V
 use crate::coach::{apply_vitals_to_goals, build_coach_packet, parse_workout_response, PacketInput};
 use crate::csv_utils::download_file;
 use crate::models::{FocusLevel, PrimaryGoal, EQUIPMENT_OPTIONS};
+use crate::claude_api::{self, read_image_file, ClaudeConfig, ImagePart};
 use crate::storage;
 use crate::sync::{self, SyncConfig, fetch_state, push_state};
 
@@ -130,6 +131,49 @@ pub fn OptionsView() -> impl IntoView {
         });
     };
 
+    // ── Optional Claude API key ──────────────────────────────────────────────
+    // Its own localStorage entry; nothing here is ever folded into the synced
+    // state. Save/Test key/Clear mirror the Sync card's shape.
+    let claude_key = RwSignal::new(storage::load_claude_config().api_key);
+    let claude_status: RwSignal<Option<String>> = RwSignal::new(None);
+    let claude_testing = RwSignal::new(false);
+
+    let save_claude_key = move |_| {
+        let key = claude_key.get_untracked().trim().to_string();
+        storage::save_claude_config(&ClaudeConfig { api_key: key.clone() });
+        claude_status.set(Some(if key.is_empty() {
+            "Key cleared.".to_string()
+        } else {
+            "✓ Saved on this device.".to_string()
+        }));
+        state.show_toast("Claude API key saved");
+    };
+
+    let clear_claude_key = move |_| {
+        claude_key.set(String::new());
+        storage::clear_claude_config();
+        claude_status.set(Some("Key cleared.".into()));
+        state.show_toast("Claude API key cleared");
+    };
+
+    let test_claude_key = move |_| {
+        let key = claude_key.get_untracked().trim().to_string();
+        if key.is_empty() {
+            // Empty field: inline validation, no request.
+            claude_status.set(Some("Paste a key first.".into()));
+            return;
+        }
+        claude_testing.set(true);
+        claude_status.set(None);
+        spawn_local(async move {
+            match claude_api::test_key(&key).await {
+                Ok(()) => claude_status.set(Some("✓ Key works.".into())),
+                Err(e) => claude_status.set(Some(format!("✗ {e}"))),
+            }
+            claude_testing.set(false);
+        });
+    };
+
     let clear_local = move |_| {
         if let Some(storage) = web_sys::window()
             .and_then(|w| w.local_storage().ok().flatten())
@@ -163,6 +207,40 @@ pub fn OptionsView() -> impl IntoView {
             <GoalsEditor/>
 
             <CardioMobilityEditor/>
+
+            <div class="card claude-key-card" style="margin-bottom:12px">
+                <div class="fw-600" style="margin-bottom:4px">"Claude API key (optional)"</div>
+                <div class="text-muted text-sm" style="margin-bottom:12px">
+                    "Paste your own Anthropic API key to generate workouts and read screenshots \
+                     without copy/paste. Stored only on this device; never synced."
+                </div>
+
+                <input
+                    type="password"
+                    class="input claude-key-input"
+                    style="margin-bottom:10px"
+                    placeholder="sk-ant-..."
+                    prop:value=move || claude_key.get()
+                    on:input=move |e| claude_key.set(event_target_value(&e))
+                />
+
+                {move || claude_status.get().map(|s| view! {
+                    <div class="text-sm claude-key-status" style="margin-bottom:8px; word-break:break-word">{s}</div>
+                })}
+
+                <div style="display:flex; gap:8px">
+                    <button class="btn btn-primary claude-save-btn" style="flex:1" on:click=save_claude_key>"Save"</button>
+                    <button
+                        class="btn btn-secondary claude-test-btn"
+                        style="flex:1"
+                        disabled=move || claude_testing.get()
+                        on:click=test_claude_key
+                    >
+                        {move || if claude_testing.get() { "Testing…" } else { "Test key" }}
+                    </button>
+                    <button class="btn btn-secondary claude-clear-btn" style="flex:1" on:click=clear_claude_key>"Clear"</button>
+                </div>
+            </div>
 
             <div class="card" style="margin-bottom:12px">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px">
@@ -714,12 +792,9 @@ pub fn CoachPacketView() -> impl IntoView {
         download_file("coach_brief.md", &text);
     };
 
-    let import_workout = move |_| {
-        let text = response_text.get_untracked();
-        if text.trim().is_empty() {
-            import_status.set(Some("Paste Claude's JSON response first.".into()));
-            return;
-        }
+    // The one import path. Both the pasted response and the API response land
+    // here, so a given JSON blob produces the same schedule either way.
+    let apply_response = move |text: String| {
         let target = target_date();
         let created = current_datetime();
         let library = state.library.get_untracked();
@@ -751,6 +826,73 @@ pub fn CoachPacketView() -> impl IntoView {
         }
     };
 
+    let import_workout = move |_| {
+        let text = response_text.get_untracked();
+        if text.trim().is_empty() {
+            import_status.set(Some("Paste Claude's JSON response first.".into()));
+            return;
+        }
+        apply_response(text);
+    };
+
+    // ── Optional direct-to-API path ──────────────────────────────────────────
+    // Only rendered when a key is saved. The copy/paste UI below stays put
+    // either way, so a failed call leaves the user exactly where they were.
+    let claude_key = RwSignal::new(storage::load_claude_config().api_key);
+    let has_key = move || !claude_key.get().trim().is_empty();
+    let generating = RwSignal::new(false);
+    // Optional Apple Health VO2 max screenshot to send with the brief: the
+    // `vitals` block comes back in the same response the workout does.
+    let vitals_image: RwSignal<Option<ImagePart>> = RwSignal::new(None);
+    let vitals_name: RwSignal<Option<String>> = RwSignal::new(None);
+
+    let pick_vitals_image = move |ev: leptos::ev::Event| {
+        let input = event_target::<web_sys::HtmlInputElement>(&ev);
+        let Some(file) = input.files().and_then(|f| f.get(0)) else { return };
+        let name = file.name();
+        let media_type = file.type_();
+        spawn_local(async move {
+            match read_image_file(&file, &media_type).await {
+                Some(part) => {
+                    vitals_image.set(Some(part));
+                    vitals_name.set(Some(name));
+                }
+                None => {
+                    vitals_image.set(None);
+                    vitals_name.set(None);
+                    import_status.set(Some(
+                        "✗ That file isn't a usable image (wrong type, empty, or over 5 MB).".into(),
+                    ));
+                }
+            }
+        });
+    };
+
+    let generate_with_claude = move |_| {
+        let key = claude_key.get_untracked().trim().to_string();
+        if key.is_empty() {
+            import_status.set(Some("No Claude API key saved — add one in Options.".into()));
+            return;
+        }
+        let prompt = packet();
+        let image = vitals_image.get_untracked();
+        generating.set(true);
+        import_status.set(None);
+        spawn_local(async move {
+            // A key cleared mid-flight doesn't cancel this call: `key` was
+            // captured before the await, and the response still imports.
+            let result = claude_api::send_message(&key, &prompt, image.as_ref()).await;
+            generating.set(false);
+            match result {
+                Ok(text) => apply_response(text),
+                Err(e) => {
+                    import_status.set(Some(format!("✗ {e}")));
+                    state.show_toast(format!("{e}"));
+                }
+            }
+        });
+    };
+
     view! {
         <div class="page">
             <div class="page-header">
@@ -766,6 +908,34 @@ pub fn CoachPacketView() -> impl IntoView {
                     "1) Copy this brief → 2) paste into Claude Code (any session) → 3) paste Claude's JSON response below → 4) Import."
                 </div>
             </div>
+
+            {move || has_key().then(|| view! {
+                <div class="card claude-generate-card" style="margin-bottom:12px">
+                    <div class="fw-600" style="margin-bottom:6px">"Generate with your Claude key"</div>
+                    <div class="text-muted text-sm" style="margin-bottom:10px">
+                        "Sends this brief straight to Claude and schedules the workout it returns. \
+                         Copy/paste below still works if the call fails."
+                    </div>
+                    <label class="text-sm text-muted">"Apple Health VO2 max screenshot (optional)"</label>
+                    <input
+                        type="file"
+                        accept="image/*"
+                        class="claude-vitals-file"
+                        style="margin-bottom:10px"
+                        on:change=pick_vitals_image
+                    />
+                    {move || vitals_name.get().map(|n| view! {
+                        <div class="text-sm text-muted" style="margin-bottom:8px">"Attached: " {n}</div>
+                    })}
+                    <button
+                        class="btn btn-primary btn-full claude-generate-btn"
+                        disabled=move || generating.get()
+                        on:click=generate_with_claude
+                    >
+                        {move || if generating.get() { "Generating…" } else { "✨ Generate with Claude" }}
+                    </button>
+                </div>
+            })}
 
             <div style="display:flex; gap:8px; margin-bottom:8px">
                 <button class="btn btn-primary" style="flex:1" on:click=copy_packet>"📋 Copy brief"</button>

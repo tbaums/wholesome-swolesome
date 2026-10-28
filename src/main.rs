@@ -1,4 +1,5 @@
 mod app;
+mod claude_api;
 mod coach;
 mod components;
 mod csv_utils;

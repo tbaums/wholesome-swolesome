@@ -3,6 +3,10 @@ use crate::models::{
 };
 
 const SYNC_CONFIG_KEY: &str = "ws_gh_sync";
+/// The optional Anthropic key gets its OWN entry, deliberately separate from
+/// `ws_gh_sync`: nothing under this key is ever folded into `SyncedState`, so
+/// it cannot reach `state.json` or the user's GitHub repo.
+const CLAUDE_CONFIG_KEY: &str = "ws_claude_api";
 const LAST_PUSH_KEY: &str = "ws_last_push_at";
 const EXERCISE_HISTORY_KEY: &str = "ws_ex_history";
 const SESSION_KEY: &str = "ws_active_session";
@@ -96,6 +100,25 @@ pub fn load_sync_config() -> crate::sync::SyncConfig {
 pub fn save_sync_config(cfg: &crate::sync::SyncConfig) {
     if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(cfg)) {
         let _ = storage.set_item(SYNC_CONFIG_KEY, &json);
+    }
+}
+
+pub fn load_claude_config() -> crate::claude_api::ClaudeConfig {
+    local_storage()
+        .and_then(|s| s.get_item(CLAUDE_CONFIG_KEY).ok().flatten())
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_claude_config(cfg: &crate::claude_api::ClaudeConfig) {
+    if let (Some(storage), Ok(json)) = (local_storage(), serde_json::to_string(cfg)) {
+        let _ = storage.set_item(CLAUDE_CONFIG_KEY, &json);
+    }
+}
+
+pub fn clear_claude_config() {
+    if let Some(storage) = local_storage() {
+        let _ = storage.remove_item(CLAUDE_CONFIG_KEY);
     }
 }
 

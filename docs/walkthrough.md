@@ -201,7 +201,7 @@ pushed. While you use it, every change schedules a 2-second debounced push back.
 - **Audit trail comes free.** Every workout change is a git commit. `git log` is
   your history.
 
-### 2. The AI plans the workout — and there's no AI *in* the app
+### 2. The AI plans the workout — and by default there's no AI *in* the app
 
 This isn't an "AI-powered" wrapper around a chatbot. There's no API key for Anthropic
 in the app, no Claude SDK call from the WASM bundle, no streaming response. The app
@@ -232,6 +232,20 @@ Why this is the right call:
   `coach-brief` binary, which calls the same `coach::build_coach_packet` the in-app
   Coach Brief does, so the nightly agent and the button in your pocket can't drift
   apart. You wake up, open the PWA, today's session is there.
+
+**The opt-in exception.** Copy/paste is the default and always works, but it is a
+chore three times over, so Options takes *your own* Anthropic key. Save one and the
+same buttons call `api.anthropic.com` directly: *Generate with Claude* posts the very
+same brief and runs the very same parser, and the cardio/VO2 imports grow a *Choose
+screenshot* picker that sends the image as a base64 block with the prompt the copy
+flow already uses. One model constant, an explicit reasoning effort, and a
+`stop_reason` check that refuses to import a refusal or a truncated response.
+
+The design holds even so: it's *your* key, not the app's; it lives in its own
+`localStorage` entry on that one device and never enters `state.json`, the GitHub
+sync or the CSV export; and nothing is removed — every copy/paste control stays
+exactly where it was, which is what you fall back to when a call 401s or the network
+drops.
 
 ### 3. Rust → WASM → PWA on iPhone Safari
 
