@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
+import { fullPageShot } from './helpers';
 
 // Library-backed leg-day walkthrough. Verifies that:
 //  - The Library tab loads and a detail view shows the body silhouette
@@ -21,7 +22,9 @@ async function shot(page: Page, label: string) {
   shotIdx++;
   const n = String(shotIdx).padStart(2, '0');
   const file = path.join(SHOTS_DIR, `${n}_${label}.png`);
-  await page.screenshot({ path: file, fullPage: true });
+  // Chrome-neutralised capture: see fullPageShot's note on fixed/sticky
+  // elements being painted mid-image by Chromium's fullPage screenshots.
+  await fullPageShot(page, file);
   console.log(`  📸 ${path.basename(file)}`);
 }
 

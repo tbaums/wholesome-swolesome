@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
+import { fullPageShot, viewportShot } from './helpers';
 
 const BASE = 'http://localhost:8081';
 const SHOTS_DIR = path.join(__dirname, 'screenshots', 'walkthrough_hypertrophy');
@@ -8,11 +9,14 @@ const SHOTS_DIR = path.join(__dirname, 'screenshots', 'walkthrough_hypertrophy')
 fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
 let shotIdx = 0;
-async function shot(page: Page, label: string) {
+async function shot(page: Page, label: string, opts: { viewport?: boolean } = {}) {
   shotIdx++;
   const n = String(shotIdx).padStart(2, '0');
   const file = path.join(SHOTS_DIR, `${n}_${label}.png`);
-  await page.screenshot({ path: file, fullPage: true });
+  // Default is a chrome-neutralised fullPage capture: see fullPageShot's note
+  // on fixed/sticky elements being painted mid-image by Chromium. Scenes whose
+  // point IS the scroll position take a viewport shot instead.
+  await (opts.viewport ? viewportShot(page, file) : fullPageShot(page, file));
   console.log(`  📸 ${path.basename(file)}`);
 }
 
@@ -138,18 +142,23 @@ test.describe('Hypertrophy walkthrough', () => {
       await page.locator('.goal-pill').filter({ hasText: new RegExp(`^${eq}$`) }).click();
     }
 
-    // ── 9. Notes textarea — a generic athletic-shape prompt ──────────────────
-    const textareas = page.locator('.card textarea');
+    // ── 9. Free-text goal fields — now tap-to-open full-screen editors (#42) ──
+    // `.note-preview` cards stand in for the old inline textareas: tap one,
+    // type into the overlay's `.note-editor-area`, tap Done to commit.
+    const fillNote = async (idx: number, text: string) => {
+      await page.locator('.note-preview').nth(idx).click();
+      await page.waitForSelector('.note-editor-area');
+      await page.locator('.note-editor-area').fill(text);
+      await page.locator('.note-editor-bar button', { hasText: 'Done' }).click();
+      await page.waitForSelector('.note-editor', { state: 'detached' });
+    };
     // avoid box first
-    await textareas.nth(0).fill(
-      'Left shoulder limitation — no heavy overhead pressing.',
-    );
-    await textareas.nth(0).press('Tab');
+    await fillNote(0, 'Left shoulder limitation — no heavy overhead pressing.');
     // notes box second
-    await textareas.nth(1).fill(
+    await fillNote(
+      1,
       'Hypertrophy focus; balanced push/pull. Prefer compound lifts. Building glutes and posterior chain for athletic shape.',
     );
-    await textareas.nth(1).press('Tab');
 
     await shot(page, 'options_goals_filled');
 
@@ -162,12 +171,14 @@ test.describe('Hypertrophy walkthrough', () => {
 
     await page.locator('button', { hasText: 'Generate workout with Claude' }).click();
     await page.waitForSelector('.coach-packet-pre');
-    await shot(page, 'coach_brief_top');
+    // Viewport shots: "top of the brief" and "its paste box at the bottom" are
+    // the same document, so a fullPage capture of each would be the same image.
+    await shot(page, 'coach_brief_top', { viewport: true });
 
     // Target date auto-computes to today (no scheduled workout yet).
     // Scroll to bottom of the brief so paste textarea is visible.
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await shot(page, 'coach_brief_bottom');
+    await shot(page, 'coach_brief_bottom', { viewport: true });
 
     // ── 11. Paste the Claude-style JSON response and import ──────────────────
     const pasteBox = page.locator('textarea').filter({ hasText: '' }).last();

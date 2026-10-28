@@ -110,3 +110,64 @@ export async function completeAllSets(page: Page) {
     }
   }
 }
+
+/**
+ * `fullPage` screenshot with the app's fixed/sticky chrome neutralised.
+ *
+ * Chromium paints `position: fixed` / `sticky` elements at their *viewport*
+ * position into a fullPage capture, so on a page taller than the viewport the
+ * bottom nav and the sticky `.page-header` end up painted across the middle of
+ * the image, hiding whatever is behind them (the Sync actions buttons, the
+ * weekly-cardio input, …). For the walkthrough shots — which are the thing
+ * people actually look at — that artifact is unacceptable.
+ *
+ * So for the duration of the capture:
+ *  - `.page-header` goes `position: static`, i.e. it stays where it already is
+ *    at the top of the document instead of following the scroll, and
+ *  - `.bottom-nav` goes `position: absolute`, parked at the true bottom of the
+ *    document (the `.page` padding already reserves `--nav-h` of space there).
+ *
+ * Both are restored afterwards, so this only affects the screenshot.
+ */
+export async function fullPageShot(page: Page, file: string) {
+  await page.evaluate(() => {
+    const style = document.createElement('style');
+    style.id = 'walkthrough-chrome-fix';
+    style.textContent =
+      '.page-header { position: static !important; }' +
+      '.bottom-nav { position: absolute !important; bottom: auto !important; }';
+    document.head.appendChild(style);
+
+    // Park the nav at the document's bottom edge. Measured after the style is
+    // in place, since un-sticking the header can change the document height.
+    const nav = document.querySelector('.bottom-nav') as HTMLElement | null;
+    if (!nav) return;
+    const docH = Math.max(
+      document.documentElement.scrollHeight,
+      document.body.scrollHeight,
+      window.innerHeight,
+    );
+    nav.style.top = `${docH - nav.offsetHeight}px`;
+  });
+
+  await page.screenshot({ path: file, fullPage: true });
+
+  await page.evaluate(() => {
+    const nav = document.querySelector('.bottom-nav') as HTMLElement | null;
+    if (nav) nav.style.top = '';
+    document.getElementById('walkthrough-chrome-fix')?.remove();
+  });
+}
+
+/**
+ * Plain viewport-height screenshot — the phone's screen, as the user sees it.
+ *
+ * The counterpart to [`fullPageShot`]: where a scene is *about* scroll position
+ * (top of the Coach Brief vs. its paste box at the bottom), a fullPage capture
+ * flattens both into the same tall image. A viewport shot keeps them distinct,
+ * and fixed/sticky chrome paints exactly where it belongs, so there's no
+ * mid-image artifact to neutralise.
+ */
+export async function viewportShot(page: Page, file: string) {
+  await page.screenshot({ path: file });
+}
